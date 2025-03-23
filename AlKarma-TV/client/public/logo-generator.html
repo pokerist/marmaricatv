@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>AlKarma TV Logo Generator</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+    canvas { border: 1px solid #ccc; margin-bottom: 20px; }
+    .controls { margin-bottom: 20px; }
+    button { padding: 10px 15px; background: #0d6efd; color: white; border: none; border-radius: 4px; cursor: pointer; }
+    button:hover { background: #0b5ed7; }
+    a { display: block; margin: 10px 0; }
+  </style>
+</head>
+<body>
+  <h1>AlKarma TV Logo Generator</h1>
+  <p>This tool generates logo files for AlKarma TV. Click the buttons to download the images.</p>
+  
+  <div class="controls">
+    <button onclick="generateAndDownload(192, 'logo192.png')">Generate logo192.png</button>
+    <button onclick="generateAndDownload(512, 'logo512.png')">Generate logo512.png</button>
+    <button onclick="generateFavicon()">Generate favicon.ico</button>
+  </div>
+  
+  <canvas id="canvas" width="512" height="512"></canvas>
+  
+  <script>
+    function drawLogo(size) {
+      const canvas = document.getElementById('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      
+      const ctx = canvas.getContext('2d');
+      
+      // Background
+      ctx.fillStyle = '#0d6efd';
+      ctx.fillRect(0, 0, size, size);
+      
+      // Text
+      ctx.fillStyle = 'white';
+      let fontSize = Math.floor(size / 6);
+      ctx.font = `bold ${fontSize}px Arial`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      
+      // Draw AlKarma text
+      ctx.fillText('AlKarma', size / 2, size / 2 - fontSize / 2);
+      
+      // Draw TV text
+      ctx.fillText('TV', size / 2, size / 2 + fontSize / 2);
+      
+      return canvas;
+    }
+    
+    function generateAndDownload(size, filename) {
+      const canvas = drawLogo(size);
+      const link = document.createElement('a');
+      link.download = filename;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    }
+    
+    function generateFavicon() {
+      const canvas = drawLogo(32);
+      const link = document.createElement('a');
+      link.download = 'favicon.ico';
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    }
+  </script>
+</body>
+</html>

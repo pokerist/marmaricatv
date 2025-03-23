@@ -68,9 +68,28 @@ const DevicesList = () => {
   };
 
   // Handle device status change
-  const handleStatusChange = async (id, newStatus, deviceName) => {
+  const handleStatusChange = async (id, newStatus, deviceName, expiryDate) => {
     try {
-      await devicesAPI.updateDevice(id, { status: newStatus });
+      // Get the current device info first
+      const deviceInfo = await devicesAPI.getDeviceById(id);
+      const device = deviceInfo.data.data;
+      
+      // Check if we're trying to activate an expired device
+      const today = new Date().toISOString().split('T')[0];
+      if (newStatus === 'active' && device.expiry_date < today) {
+        const proceed = window.confirm(
+          `Device ${deviceName} has already expired (${device.expiry_date}). Setting to active will override the expiry check. Continue?`
+        );
+        if (!proceed) return;
+      }
+      
+      // Update the device
+      await devicesAPI.updateDevice(id, { 
+        status: newStatus,
+        // Include the expiry date to ensure it's checked on the server
+        expiry_date: device.expiry_date 
+      });
+      
       toast.success(`Device status updated to ${newStatus}`);
       fetchDevices(); // Refresh the list
     } catch (error) {
@@ -206,8 +225,9 @@ const DevicesList = () => {
                               variant="outline-success"
                               size="sm"
                               className="me-1 mb-1"
-                              onClick={() => handleStatusChange(device.id, 'active', device.owner_name)}
+                              onClick={() => handleStatusChange(device.id, 'active', device.owner_name, device.expiry_date)}
                               title="Enable Device"
+                              disabled={device.expiry_date < new Date().toISOString().split('T')[0] && device.status === 'expired'}
                             >
                               <FaCheckCircle /> Enable
                             </Button>
@@ -218,7 +238,7 @@ const DevicesList = () => {
                               variant="outline-secondary"
                               size="sm"
                               className="me-1 mb-1"
-                              onClick={() => handleStatusChange(device.id, 'disabled', device.owner_name)}
+                              onClick={() => handleStatusChange(device.id, 'disabled', device.owner_name, device.expiry_date)}
                               title="Disable Device"
                             >
                               <FaBan /> Disable

@@ -7,25 +7,113 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  // Default timeout for all requests
+  timeout: 8000, // 8 seconds
 });
 
-// Add response interceptor for global error handling
-api.interceptors.response.use(
-  (response) => response,
+// Track active requests to prevent duplicate error messages
+const activeRequests = new Set();
+
+// Add request interceptor for request handling
+api.interceptors.request.use(
+  (config) => {
+    // Generate a unique ID for this request
+    const requestId = `${config.method}-${config.url}-${Date.now()}`;
+    config.requestId = requestId;
+    activeRequests.add(requestId);
+    
+    console.log(`Starting request to ${config.url}`);
+    return config;
+  },
   (error) => {
-    // Handle errors globally
-    const errorMessage = error.response?.data?.error || 'An error occurred. Please try again.';
-    toast.error(errorMessage);
     return Promise.reject(error);
   }
 );
 
+// Add response interceptor for global error handling
+api.interceptors.response.use(
+  (response) => {
+    // Remove request from tracking
+    if (response.config.requestId) {
+      activeRequests.delete(response.config.requestId);
+    }
+    
+    console.log(`Successfully completed request to ${response.config.url}`);
+    return response;
+  },
+  (error) => {
+    // Clean up request tracking
+    if (error.config?.requestId) {
+      activeRequests.delete(error.config.requestId);
+    }
+    
+    // Prevent showing multiple errors for the same request type in quick succession
+    const errorKey = `${error.config?.method || 'unknown'}-${error.config?.url || 'unknown'}-error`;
+    const showErrorToast = (msg) => {
+      toast.error(msg, {
+        toastId: errorKey, // This ensures only one toast with this ID is shown at a time
+        autoClose: 3000 
+      });
+    };
+    
+    // Handle errors based on their type
+    if (error.code === 'ECONNABORTED' || error.message === 'Network Error') {
+      showErrorToast('Connection to server failed. Please try again in a few moments.');
+    } else if (error.code === 'ERR_NETWORK') {
+      showErrorToast('Network connection error. Server might be restarting or unavailable.');
+    } else if (error.code === 'ERR_BAD_RESPONSE') {
+      showErrorToast('The server sent an invalid response. Please try again.');
+    } else if (!error.response) {
+      showErrorToast('Unable to reach the server. Please check your connection.');
+    } else {
+      const errorMessage = error.response?.data?.error || 'An unexpected error occurred. Please try again.';
+      showErrorToast(errorMessage);
+    }
+    
+    // Log the error for debugging (with cleaner data)
+    console.error('API Error:', {
+      url: error.config?.url,
+      method: error.config?.method,
+      status: error.response?.status,
+      message: error.message,
+      code: error.code
+    });
+    
+    return Promise.reject(error);
+  }
+);
+
+// Retry logic for failed requests
+const retryRequest = async (request, maxRetries = 2) => {
+  let retries = 0;
+  
+  const execute = async () => {
+    try {
+      return await request();
+    } catch (err) {
+      if (retries < maxRetries && 
+          (err.code === 'ECONNABORTED' || 
+           err.code === 'ERR_NETWORK' || 
+           err.message === 'Network Error')) {
+        retries++;
+        console.log(`Retry attempt ${retries} for failed request`);
+        // Exponential backoff: 1s, 2s, 4s, etc.
+        await new Promise(resolve => setTimeout(resolve, Math.pow(2, retries - 1) * 1000));
+        return execute();
+      }
+      throw err;
+    }
+  };
+  
+  return execute();
+};
+
 // Dashboard API
 export const dashboardAPI = {
-  getDashboardData: () => api.get('/dashboard'),
-  getRecentActions: (limit = 20) => api.get(`/dashboard/actions?limit=${limit}`),
-  getExpiringDevices: (days = 7) => api.get(`/dashboard/expiring-devices?days=${days}`),
-  clearActionHistory: () => api.delete('/dashboard/actions'),
+  getDashboardData: () => retryRequest(() => api.get('/dashboard')),
+  getRecentActions: (limit = 20) => retryRequest(() => api.get(`/dashboard/actions?limit=${limit}`)),
+  getExpiringDevices: (days = 7) => retryRequest(() => api.get(`/dashboard/expiring-devices?days=${days}`)),
+  clearActionHistory: () => retryRequest(() => api.delete('/dashboard/actions')),
 };
 
 // Devices API
@@ -35,12 +123,12 @@ export const devicesAPI = {
     if (filters.status) queryParams.append('status', filters.status);
     if (filters.expiring) queryParams.append('expiring', filters.expiring);
     
-    return api.get(`/devices?${queryParams.toString()}`);
+    return retryRequest(() => api.get(`/devices?${queryParams.toString()}`));
   },
-  getDeviceById: (id) => api.get(`/devices/${id}`),
-  createDevice: (deviceData) => api.post('/devices', deviceData),
-  updateDevice: (id, deviceData) => api.put(`/devices/${id}`, deviceData),
-  deleteDevice: (id) => api.delete(`/devices/${id}`),
+  getDeviceById: (id) => retryRequest(() => api.get(`/devices/${id}`)),
+  createDevice: (deviceData) => retryRequest(() => api.post('/devices', deviceData)),
+  updateDevice: (id, deviceData) => retryRequest(() => api.put(`/devices/${id}`, deviceData)),
+  deleteDevice: (id) => retryRequest(() => api.delete(`/devices/${id}`)),
 };
 
 // Channels API
@@ -51,21 +139,23 @@ export const channelsAPI = {
     if (filters.category) queryParams.append('category', filters.category);
     if (filters.has_news !== undefined) queryParams.append('has_news', filters.has_news);
     
-    return api.get(`/channels?${queryParams.toString()}`);
+    return retryRequest(() => api.get(`/channels?${queryParams.toString()}`));
   },
-  getChannelById: (id) => api.get(`/channels/${id}`),
-  createChannel: (channelData) => api.post('/channels', channelData),
-  updateChannel: (id, channelData) => api.put(`/channels/${id}`, channelData),
-  deleteChannel: (id) => api.delete(`/channels/${id}`),
+  getChannelById: (id) => retryRequest(() => api.get(`/channels/${id}`)),
+  createChannel: (channelData) => retryRequest(() => api.post('/channels', channelData)),
+  updateChannel: (id, channelData) => retryRequest(() => api.put(`/channels/${id}`, channelData)),
+  deleteChannel: (id) => retryRequest(() => api.delete(`/channels/${id}`)),
   uploadLogo: (id, logoFile) => {
     const formData = new FormData();
     formData.append('logo', logoFile);
     
-    return api.post(`/channels/${id}/logo`, formData, {
+    return retryRequest(() => api.post(`/channels/${id}/logo`, formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
-    });
+      // Longer timeout for file uploads
+      timeout: 15000, 
+    }));
   },
 };
 
@@ -75,12 +165,12 @@ export const newsAPI = {
     let queryParams = new URLSearchParams();
     if (search) queryParams.append('search', search);
     
-    return api.get(`/news?${queryParams.toString()}`);
+    return retryRequest(() => api.get(`/news?${queryParams.toString()}`));
   },
-  getNewsById: (id) => api.get(`/news/${id}`),
-  createNews: (newsData) => api.post('/news', newsData),
-  updateNews: (id, newsData) => api.put(`/news/${id}`, newsData),
-  deleteNews: (id) => api.delete(`/news/${id}`),
+  getNewsById: (id) => retryRequest(() => api.get(`/news/${id}`)),
+  createNews: (newsData) => retryRequest(() => api.post('/news', newsData)),
+  updateNews: (id, newsData) => retryRequest(() => api.put(`/news/${id}`, newsData)),
+  deleteNews: (id) => retryRequest(() => api.delete(`/news/${id}`)),
 };
 
 export default api;

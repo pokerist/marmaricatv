@@ -127,10 +127,89 @@ app.get('/api/health', (req, res) => {
   res.status(200).json({ status: 'OK', message: 'Server is running' });
 });
 
+// Function to check for expired devices and update their status
+function checkExpiredDevices() {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    
+    // Log that we're checking for expired devices
+    console.log(`Checking for expired devices as of ${today}`);
+    
+    // Helper function to handle a single device update with proper error handling
+    const updateDeviceStatus = (device) => {
+      return new Promise((resolve, reject) => {
+        db.run(
+          'UPDATE devices SET status = ?, updated_at = ? WHERE id = ?',
+          ['expired', new Date().toISOString(), device.id],
+          function(err) {
+            if (err) {
+              console.error(`Error updating device ${device.id} status:`, err.message);
+              reject(err);
+            } else {
+              console.log(`Device ${device.duid} marked as expired`);
+              
+              // Log the action
+              const now = new Date().toISOString();
+              db.run(
+                'INSERT INTO actions (action_type, description, created_at) VALUES (?, ?, ?)',
+                ['device_expired', `Device ${device.duid} (${device.owner_name}) has expired`, now],
+                (err) => {
+                  if (err) {
+                    console.error('Error logging action:', err.message);
+                    // Don't reject here, as the main operation succeeded
+                  }
+                  resolve();
+                }
+              );
+            }
+          }
+        );
+      });
+    };
+    
+    // Query for expired devices
+    db.all(
+      `SELECT * FROM devices WHERE date(expiry_date) < date(?) AND status != 'expired'`,
+      [today],
+      async (err, devices) => {
+        if (err) {
+          console.error('Error checking for expired devices:', err.message);
+          return;
+        }
+        
+        if (devices.length > 0) {
+          console.log(`Found ${devices.length} devices that have expired`);
+          
+          // Update each expired device, but do it sequentially to avoid race conditions
+          for (const device of devices) {
+            try {
+              await updateDeviceStatus(device);
+            } catch (error) {
+              console.error(`Failed to update device ${device.id}:`, error);
+              // Continue with other devices even if one fails
+            }
+          }
+          console.log('Finished processing expired devices');
+        } else {
+          console.log('No newly expired devices found');
+        }
+      }
+    );
+  } catch (error) {
+    console.error('Unhandled error in checkExpiredDevices:', error);
+  }
+}
+
 // Start server
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`API available at http://localhost:${PORT}/api`);
+  
+  // Check for expired devices on startup
+  checkExpiredDevices();
+  
+  // Set up a periodic check for expired devices (every hour)
+  setInterval(checkExpiredDevices, 60 * 60 * 1000);
 });
 
 // Handle shutdown gracefully
