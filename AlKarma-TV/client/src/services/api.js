@@ -1,15 +1,31 @@
 import axios from 'axios';
 import { toast } from 'react-toastify';
 
-// Create axios instance with base URL
+// Get environment variables with fallbacks for safety
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+const API_TIMEOUT = parseInt(process.env.REACT_APP_API_TIMEOUT || '8000', 10);
+const API_RETRIES = parseInt(process.env.REACT_APP_API_RETRIES || '2', 10);
+const UPLOADS_URL = process.env.REACT_APP_UPLOADS_URL || 'http://localhost:5000/uploads';
+
+// Create axios instance with base URL from env
 const api = axios.create({
-  baseURL: process.env.REACT_APP_API_URL || 'http://localhost:5000/api',
+  baseURL: API_URL,
   headers: {
     'Content-Type': 'application/json',
   },
-  // Default timeout for all requests
-  timeout: 8000, // 8 seconds
+  // Default timeout from env
+  timeout: API_TIMEOUT,
 });
+
+// Log configuration during development
+if (process.env.NODE_ENV !== 'production') {
+  console.log('API Configuration:', {
+    baseURL: API_URL,
+    timeout: API_TIMEOUT,
+    retries: API_RETRIES,
+    uploadsUrl: UPLOADS_URL
+  });
+}
 
 // Track active requests to prevent duplicate error messages
 const activeRequests = new Set();
@@ -83,8 +99,8 @@ api.interceptors.response.use(
   }
 );
 
-// Retry logic for failed requests
-const retryRequest = async (request, maxRetries = 2) => {
+// Retry logic for failed requests using env variable
+const retryRequest = async (request, maxRetries = API_RETRIES) => {
   let retries = 0;
   
   const execute = async () => {
@@ -153,10 +169,25 @@ export const channelsAPI = {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
-      // Longer timeout for file uploads
-      timeout: 15000, 
+      // Longer timeout for file uploads (double the normal timeout)
+      timeout: API_TIMEOUT * 2, 
     }));
   },
+  
+  // Helper method to get complete logo URL
+  getLogoUrl: (logoPath) => {
+    if (!logoPath) return null;
+    
+    // If it's already an absolute URL (starts with http)
+    if (logoPath.startsWith('http')) {
+      return logoPath;
+    }
+    
+    // If it's a relative path, construct full URL
+    // Remove leading slash if present
+    const path = logoPath.startsWith('/') ? logoPath.substring(1) : logoPath;
+    return `${UPLOADS_URL}/${path}`;
+  }
 };
 
 // News API

@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
@@ -8,6 +9,8 @@ const fs = require('fs');
 // Initialize express app
 const app = express();
 const PORT = process.env.PORT || 5000;
+const NODE_ENV = process.env.NODE_ENV || 'development';
+const UPLOAD_DIR = process.env.UPLOAD_DIR || 'uploads';
 
 // Middleware
 app.use(cors());
@@ -15,7 +18,12 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
 // Serve uploaded files
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/uploads', express.static(path.join(__dirname, UPLOAD_DIR)));
+
+// Log server configuration
+console.log(`Server starting in ${NODE_ENV} mode`);
+console.log(`Port: ${PORT}`);
+console.log(`Upload directory: ${UPLOAD_DIR}`);
 
 // Initialize SQLite database
 const dbPath = path.join(__dirname, 'database.sqlite');
