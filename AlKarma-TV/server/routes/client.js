@@ -167,16 +167,11 @@ router.post('/check-device', async (req, res) => {
 
 // Register a new device
 router.post('/register-device', (req, res) => {
-  const { device_name } = req.body;
+  const { duid } = req.body;
   
-  if (!device_name) {
-    return res.status(400).json({ error: 'Device name is required for registration' });
+  if (!duid) {
+    return res.status(400).json({ error: 'Device ID (DUID) is required for registration' });
   }
-  
-  // Generate unique DUID (using timestamp + random string)
-  const timestamp = new Date().getTime().toString(16);
-  const randomStr = Math.random().toString(16).substring(2, 6);
-  const duid = `${timestamp}${randomStr}`.toUpperCase();
   
   // Generate activation code (4 random digits)
   const activation_code = generateActivationCode();
@@ -196,7 +191,7 @@ router.post('/register-device', (req, res) => {
     [
       duid, 
       activation_code, 
-      device_name, 
+      '', // Empty owner_name, to be filled by admin later
       'FTA,Local', // Default allowed types
       expiryDate.toISOString().split('T')[0],
       'disabled', // Default status is disabled until activated
@@ -209,7 +204,7 @@ router.post('/register-device', (req, res) => {
       }
       
       // Log action
-      logAction('device_registered', `New device registered: ${device_name} with DUID: ${duid}`);
+      logAction('device_registered', `New device registered with DUID: ${duid}`);
       
       // Return device info with activation code
       res.status(201).json({
@@ -217,7 +212,7 @@ router.post('/register-device', (req, res) => {
         data: {
           duid,
           activation_code,
-          owner_name: device_name,
+          owner_name: '',
           status: 'disabled',
           expiry_date: expiryDate.toISOString().split('T')[0]
         }
