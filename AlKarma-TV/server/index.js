@@ -9,7 +9,6 @@ const fs = require('fs');
 // Initialize express app
 const app = express();
 const PORT = process.env.PORT || 5000;
-const HOST = process.env.HOST || 'localhost';
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const UPLOAD_DIR = process.env.UPLOAD_DIR || 'uploads';
 
@@ -210,9 +209,9 @@ function checkExpiredDevices() {
 }
 
 // Start server
-app.listen(PORT, HOST, () => {
-  console.log(`Server running on ${HOST}:${PORT}`);
-  console.log(`API available at http://${HOST}:${PORT}/api`);
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+  console.log(`API available at http://localhost:${PORT}/api`);
   
   // Check for expired devices on startup
   checkExpiredDevices();
