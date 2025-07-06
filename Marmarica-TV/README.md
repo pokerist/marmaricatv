@@ -97,6 +97,7 @@ Marmarica-TV/
 1. **Clone the repository**
    ```bash
    git clone https://github.com/pokerist/marmaricatv.git
+   cd marmaricatv
    cd Marmarica-TV
    ```
 
