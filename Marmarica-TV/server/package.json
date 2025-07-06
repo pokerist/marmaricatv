@@ -1,7 +1,7 @@
 {
   "name": "alkarma-tv-server",
   "version": "1.0.0",
-  "description": "Backend server for AlKarma TV IPTV admin panel",
+  "description": "Backend server for Marmarica TV IPTV admin panel",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",

@@ -13,8 +13,8 @@ const ChannelSchema = Yup.object().shape({
     .required('Channel name is required')
     .min(2, 'Channel name must be at least 2 characters'),
   url: Yup.string()
-    .required('Stream URL is required')
-    .url('Must be a valid URL format'),
+    .required('Stream URL is required'),
+    //.url('Must be a valid URL format'),
   type: Yup.string()
     .required('Channel type is required'),
   category: Yup.string()

@@ -17,7 +17,7 @@ const MainLayout = () => {
       {/* Sidebar */}
       <div className="sidebar">
         <div className="sidebar-logo">
-          AlKarma TV
+          Marmarica TV
         </div>
         <div className="sidebar-menu">
           <NavLink to="/" className={isActive} end>

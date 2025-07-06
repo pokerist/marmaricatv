@@ -1,4 +1,4 @@
-AlKarma TV IPTV Admin Panel - Public Assets
+Marmarica TV IPTV Admin Panel - Public Assets
 
 The following image files should be added to this directory for the application to fully work:
 

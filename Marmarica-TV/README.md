@@ -31,7 +31,7 @@ A full-stack IPTV admin panel for managing devices, channels, and news for AlKar
 ## Project Structure
 
 ```
-AlKarma-TV/
+Marmarica-TV/
 ├── client/                  # Frontend React application
 │   ├── public/              # Static files
 │   └── src/                 # React source code
@@ -62,8 +62,9 @@ AlKarma-TV/
 
 1. **Clone the repository**
    ```bash
-   git clone https://your-repository-url/AlKarma-TV.git
-   cd AlKarma-TV
+   git clone https://github.com/pokerist/marmaricatv.git
+   cd marmaricatv
+   cd Marmarica-TV
    ```
 
 2. **Install dependencies**
@@ -95,8 +96,8 @@ AlKarma-TV/
 
 1. **Clone the repository**
    ```bash
-   git clone https://your-repository-url/AlKarma-TV.git
-   cd AlKarma-TV
+   git clone https://github.com/pokerist/marmaricatv.git
+   cd Marmarica-TV
    ```
 
 2. **Install backend dependencies**
