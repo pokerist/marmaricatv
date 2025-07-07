@@ -108,7 +108,7 @@ module.exports = {
     env: {
       NODE_ENV: 'production',
       PORT: 5000,
-      SESSION_SECRET: 'your-secure-random-string'  // Same as in .env
+      SESSION_SECRET: 'Qw73o9Gx#h!sZm42nXvtp8bLaT@E0RuQj'  // Same as in .env
     }
   }]
 }

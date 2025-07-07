@@ -1,14 +1,12 @@
 module.exports = {
   apps: [
     {
-      name: 'alkarma-tv-server',
+      name: 'marmarica-tv-server',
       script: 'server/index.js',
-      watch: ['server'],
       env: {
-        NODE_ENV: 'development',
-      },
-      env_production: {
         NODE_ENV: 'production',
+        PORT: 5000,
+        SESSION_SECRET: 'Qw73o9Gx#h!sZm42nXvtp8bLaT@E0RuQj'  // Same as in .env
       }
     },
     {
