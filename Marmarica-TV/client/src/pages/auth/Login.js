@@ -1,103 +1,79 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useAuth } from '../../components/auth/AuthContext';
-import { Formik, Form, Field } from 'formik';
-import * as Yup from 'yup';
-import { Container, Row, Col, Card, Button, Alert } from 'react-bootstrap';
-
-const LoginSchema = Yup.object().shape({
-  username: Yup.string()
-    .required('Username is required'),
-  password: Yup.string()
-    .required('Password is required')
-});
+import { useAuth } from '../../contexts/AuthContext';
+import { Form, Button, Card, Alert, Container, Row, Col } from 'react-bootstrap';
 
 const Login = () => {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const [error, setError] = useState('');
 
-  // Get the redirect path from location state, or default to home
+  // Get redirect path from location state, or default to home
   const from = location.state?.from?.pathname || '/';
 
-  const handleSubmit = async (values, { setSubmitting }) => {
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+
     try {
-      setError('');
-      const success = await login(values.username, values.password);
-      if (success) {
+      const result = await login(username, password);
+      if (result.success) {
         navigate(from, { replace: true });
+      } else {
+        setError(result.error);
       }
     } catch (err) {
-      setError('Login failed. Please check your credentials.');
+      setError('Failed to log in');
     } finally {
-      setSubmitting(false);
+      setLoading(false);
     }
   };
 
   return (
     <Container>
       <Row className="justify-content-center align-items-center min-vh-100">
-        <Col md={6} lg={5}>
-          <Card className="shadow-sm">
-            <Card.Body className="p-4">
-              <div className="text-center mb-4">
-                <h2>Marmarica TV Admin</h2>
-                <p className="text-muted">Sign in to access the admin panel</p>
-              </div>
+        <Col md={6} lg={4}>
+          <Card>
+            <Card.Body>
+              <h2 className="text-center mb-4">Admin Login</h2>
+              {error && <Alert variant="danger">{error}</Alert>}
+              <Form onSubmit={handleSubmit}>
+                <Form.Group className="mb-3">
+                  <Form.Label>Username</Form.Label>
+                  <Form.Control
+                    type="text"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    required
+                    autoComplete="username"
+                  />
+                </Form.Group>
 
-              {error && (
-                <Alert variant="danger" className="mb-4">
-                  {error}
-                </Alert>
-              )}
+                <Form.Group className="mb-4">
+                  <Form.Label>Password</Form.Label>
+                  <Form.Control
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    autoComplete="current-password"
+                  />
+                </Form.Group>
 
-              <Formik
-                initialValues={{ username: '', password: '' }}
-                validationSchema={LoginSchema}
-                onSubmit={handleSubmit}
-              >
-                {({ errors, touched, isSubmitting }) => (
-                  <Form>
-                    <div className="mb-3">
-                      <Field
-                        type="text"
-                        name="username"
-                        placeholder="Username"
-                        className={`form-control ${
-                          errors.username && touched.username ? 'is-invalid' : ''
-                        }`}
-                      />
-                      {errors.username && touched.username && (
-                        <div className="invalid-feedback">{errors.username}</div>
-                      )}
-                    </div>
-
-                    <div className="mb-4">
-                      <Field
-                        type="password"
-                        name="password"
-                        placeholder="Password"
-                        className={`form-control ${
-                          errors.password && touched.password ? 'is-invalid' : ''
-                        }`}
-                      />
-                      {errors.password && touched.password && (
-                        <div className="invalid-feedback">{errors.password}</div>
-                      )}
-                    </div>
-
-                    <Button
-                      type="submit"
-                      variant="primary"
-                      className="w-100"
-                      disabled={isSubmitting}
-                    >
-                      {isSubmitting ? 'Signing in...' : 'Sign In'}
-                    </Button>
-                  </Form>
-                )}
-              </Formik>
+                <Button
+                  type="submit"
+                  className="w-100"
+                  variant="primary"
+                  disabled={loading}
+                >
+                  {loading ? 'Logging in...' : 'Log In'}
+                </Button>
+              </Form>
             </Card.Body>
           </Card>
         </Col>

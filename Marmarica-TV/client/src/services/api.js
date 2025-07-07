@@ -15,6 +15,8 @@ const api = axios.create({
   },
   // Default timeout from env
   timeout: API_TIMEOUT,
+  // Include credentials in requests
+  withCredentials: true
 });
 
 // Log configuration during development
@@ -155,12 +157,12 @@ export const channelsAPI = {
     if (filters.category) queryParams.append('category', filters.category);
     if (filters.has_news !== undefined) queryParams.append('has_news', filters.has_news);
     
-    return retryRequest(() => api.get(`/channels?${queryParams.toString()}`, { withCredentials: true }));
+    return retryRequest(() => api.get(`/channels?${queryParams.toString()}`));
   },
-  getChannelById: (id) => retryRequest(() => api.get(`/channels/${id}`, { withCredentials: true })),
-  createChannel: (channelData) => retryRequest(() => api.post('/channels', channelData, { withCredentials: true })),
-  updateChannel: (id, channelData) => retryRequest(() => api.put(`/channels/${id}`, channelData, { withCredentials: true })),
-  deleteChannel: (id) => retryRequest(() => api.delete(`/channels/${id}`, { withCredentials: true })),
+  getChannelById: (id) => retryRequest(() => api.get(`/channels/${id}`)),
+  createChannel: (channelData) => retryRequest(() => api.post('/channels', channelData)),
+  updateChannel: (id, channelData) => retryRequest(() => api.put(`/channels/${id}`, channelData)),
+  deleteChannel: (id) => retryRequest(() => api.delete(`/channels/${id}`)),
   uploadLogo: (id, logoFile) => {
     const formData = new FormData();
     formData.append('logo', logoFile);
@@ -169,12 +171,10 @@ export const channelsAPI = {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
-      withCredentials: true,
       // Longer timeout for file uploads (double the normal timeout)
       timeout: API_TIMEOUT * 2, 
     }));
   },
-  reorderChannels: (orderedIds) => retryRequest(() => api.post('/channels/reorder', { orderedIds }, { withCredentials: true })),
   
   // Helper method to get complete logo URL
   getLogoUrl: (logoPath) => {
@@ -190,6 +190,13 @@ export const channelsAPI = {
     const path = logoPath.startsWith('/') ? logoPath.substring(1) : logoPath;
     return `${UPLOADS_URL}/${path}`;
   }
+};
+
+// Auth API
+export const authAPI = {
+  login: (credentials) => retryRequest(() => api.post('/auth/login', credentials)),
+  logout: () => retryRequest(() => api.post('/auth/logout')),
+  getSession: () => retryRequest(() => api.get('/auth/session')),
 };
 
 // News API

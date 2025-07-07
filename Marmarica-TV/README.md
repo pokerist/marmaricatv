@@ -1,152 +1,139 @@
-# Marmarica TV IPTV Admin Panel
+# AlKarma TV IPTV Admin Panel
 
-A full-stack IPTV admin panel for managing devices, channels, and news for Marmarica TV. This application allows administrators to manage devices, their permissions, channels, and news content, with appropriate APIs for client devices.
+Admin panel for managing IPTV devices, channels, and news for AlKarma TV.
 
-## Features
+## Authentication System
 
-- **Authentication System** - Secure admin login with JWT-based session management
-- **Dashboard** - Overview of system stats, expiring devices, and recent actions
-- **Devices Management** - CRUD operations for devices, activation codes, and permissions
-- **Channels Management** - CRUD operations for channels with logo uploads and drag-and-drop reordering
-- **News Management** - CRUD operations for news articles
-- **Client APIs** - APIs for device registration, activation, and content delivery
+The admin panel now includes secure authentication to protect administrative routes while keeping client device APIs open.
 
-## Tech Stack
+### Features
 
-### Frontend
-- React.js with React Router
-- React Bootstrap for UI components
-- Formik & Yup for form handling
-- React Beautiful DnD for channel reordering
-- Axios for API requests
+- Secure admin login with session management
+- Protected admin routes
+- Open client device APIs
+- Password hashing with bcrypt
+- HTTP-only session cookies
+- 12-hour session expiry
+- No SSL requirement (HTTP only)
 
-### Backend
-- Node.js with Express
-- SQLite3 database
-- JWT authentication
-- File upload handling with Multer
+### Environment Variables
 
-## Quick Start
+Add these to your `.env` file:
 
-1. **Clone Repository**
+```env
+# Server
+SESSION_SECRET=your-secure-random-string
+NODE_ENV=production
+PORT=5000
+
+# Frontend
+REACT_APP_API_URL=http://155.138.231.215/api
+```
+
+### Deployment Steps
+
+1. Install Dependencies:
    ```bash
-   git clone https://github.com/pokerist/marmaricatv.git
-   cd marmaricatv
-   ```
-
-2. **Install Dependencies**
-
-   Server:
-   ```bash
+   # Backend
    cd server
    npm install
-   ```
 
-   Client:
-   ```bash
-   cd ../client
-   npm install
-   ```
-
-3. **Environment Setup**
-
-   Server (.env):
-   ```
-   NODE_ENV=development
-   PORT=5000
-   UPLOAD_DIR=uploads
-   CLIENT_URL=http://localhost:3000
-   JWT_SECRET=your-dev-secret
-   JWT_EXPIRY=12h
-   ```
-
-   Client (.env):
-   ```
-   REACT_APP_API_URL=http://localhost:5000/api
-   REACT_APP_UPLOADS_URL=http://localhost:5000/uploads
-   ```
-
-4. **Initialize Database**
-   ```bash
-   cd ../server
-   node scripts/setup-admin.js
-   node scripts/update-channels-order.js
-   ```
-
-5. **Start Development Servers**
-
-   Server:
-   ```bash
-   cd server
-   npm run dev
-   ```
-
-   Client:
-   ```bash
+   # Frontend
    cd client
-   npm start
+   npm install
    ```
 
-## Production Deployment
+2. Create Initial Admin User:
+   ```bash
+   # Generate random password
+   cd server
+   node scripts/manage-admin.js create admin
 
-For production deployment instructions, see [DEPLOYMENT.md](DEPLOYMENT.md).
+   # Or set specific password
+   node scripts/manage-admin.js set-password admin your-password
+   ```
+   The credentials will be saved in `server/admin-credentials.txt`
 
-## API Documentation
+3. Update PM2 Configuration:
+   ```javascript
+   // ecosystem.config.js
+   module.exports = {
+     apps: [{
+       name: 'marmarica-tv-server',
+       script: 'server/index.js',
+       env: {
+         NODE_ENV: 'production',
+         PORT: 5000,
+         SESSION_SECRET: 'your-secure-random-string'
+       }
+     }]
+   }
+   ```
 
-- [Admin API Documentation](API_DOCUMENTATION.md)
-- [Client API Documentation](CLIENT_API_DOCUMENTATION.md)
+4. Build & Deploy:
+   ```bash
+   # Build frontend
+   cd client
+   npm run build
 
-## Project Structure
+   # Start server with PM2
+   pm2 start ecosystem.config.js
+   ```
 
+### Admin User Management
+
+#### Create New Admin
+```bash
+cd server
+node scripts/manage-admin.js create <username>
 ```
-marmaricatv/
-├── client/                  # Frontend React application
-│   ├── public/             # Static files
-│   └── src/                # React source code
-│       ├── components/     # Reusable components
-│       ├── pages/         # Page components
-│       ├── services/      # API services
-│       └── utils/         # Utility functions
-├── server/                 # Backend Node.js application
-│   ├── controllers/       # API controllers
-│   ├── models/           # Database models
-│   ├── routes/          # API routes
-│   ├── scripts/        # Setup scripts
-│   ├── uploads/       # Channel logos
-│   └── index.js      # Server entry point
-└── README.md
+This generates a random password and saves it to `admin-credentials.txt`
+
+#### Reset Password
+```bash
+# Generate new random password
+node scripts/manage-admin.js create <username>
+
+# Set specific password
+node scripts/manage-admin.js set-password <username> <new-password>
 ```
 
-## Development
+#### Emergency Password Reset
+If you need to reset a password directly in the database:
 
-1. **Database Updates**
-   - Channel ordering: `node server/scripts/update-channels-order.js`
-   - Reset admin: `node server/scripts/setup-admin.js`
+1. Generate a bcrypt hash:
+   ```bash
+   node -e "const bcrypt = require('bcrypt'); bcrypt.hash('new-password', 10, (err, hash) => console.log(hash));"
+   ```
 
-2. **Environment Configuration**
-   - Development: Use .env files in server and client directories
-   - Production: Use .env.production in server directory
+2. Update the database:
+   ```sql
+   UPDATE admins SET password = 'generated-hash' WHERE username = 'admin';
+   ```
 
-3. **API Testing**
-   - Admin APIs require authentication
-   - Client APIs are public but require valid device ID
+### Security Notes
 
-## Maintenance
+- All admin routes require authentication
+- Client device routes (/api/client/*) remain open
+- Sessions expire after 12 hours
+- Passwords are hashed with bcrypt
+- No SSL/HTTPS configuration (as per requirements)
 
-1. **Backups**
-   - Database and uploads are backed up daily
-   - Backups are stored in /var/backups/marmarica-tv
-   - 30-day retention policy
+### Modified Files
 
-2. **Monitoring**
-   - Use PM2 for process management
-   - Check logs in ~/.pm2/logs/
-   - Monitor server resources
+Backend:
+- server/package.json (added auth dependencies)
+- server/index.js (added session handling)
+- server/middleware/auth.js (new)
+- server/controllers/auth.js (new)
+- server/routes/auth.js (new)
+- server/scripts/manage-admin.js (new)
 
-## Support
-
-For support and inquiries, please contact the project maintainer.
-
-## License
-
-This project is proprietary and confidential. Unauthorized copying, modification, distribution, or use of this software is strictly prohibited.
+Frontend:
+- client/src/App.js (added auth routes)
+- client/src/contexts/AuthContext.js (new)
+- client/src/components/PrivateRoute.js (new)
+- client/src/pages/auth/Login.js (new)
+- client/src/services/api.js (updated for auth)
+- client/src/components/layouts/MainLayout.js (added logout)
+- client/src/index.css (added auth styles)

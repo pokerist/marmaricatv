@@ -1,10 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { 
+  Container, Row, Col, Card, Table, Button, Badge, 
+  Form, InputGroup, Dropdown, DropdownButton, Image 
+} from 'react-bootstrap';
 import { Link } from 'react-router-dom';
-import { Table, Button, Container, Row, Col, Form } from 'react-bootstrap';
-import { FaEdit, FaTrash, FaGripVertical } from 'react-icons/fa';
-import { toast } from 'react-toastify';
-import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
+import { FaPlus, FaSearch, FaEdit, FaTrash, FaFilter } from 'react-icons/fa';
 import { channelsAPI } from '../../services/api';
+import { toast } from 'react-toastify';
 
 const ChannelsList = () => {
   const [channels, setChannels] = useState([]);
@@ -14,31 +16,59 @@ const ChannelsList = () => {
     category: '',
     has_news: ''
   });
+  const [searchTerm, setSearchTerm] = useState('');
 
-  // Load channels
-  const loadChannels = async () => {
+  // Categories list
+  const categories = [
+    'Religious', 'News', 'Movies', 'Family', 'Sports',
+    'Entertainment', 'Kids', 'Documentary', 'Music', 'General'
+  ];
+
+  // Fetch channels based on current filters - only for initial load, not for filtering
+  const fetchChannels = useCallback(async () => {
     try {
-      const response = await channelsAPI.getAllChannels(filters);
-      setChannels(response.data);
+      setLoading(true);
+      // Remove the filters from the API call to get all channels initially
+      const response = await channelsAPI.getAllChannels({});
+      setChannels(response.data.data);
     } catch (error) {
-      console.error('Error loading channels:', error);
+      console.error('Error fetching channels:', error);
       toast.error('Failed to load channels');
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  // Load all channels on component mount
+  useEffect(() => {
+    fetchChannels();
+  }, [fetchChannels]);
+
+  // Handle filter changes
+  const handleFilterChange = (key, value) => {
+    setFilters(prevFilters => ({
+      ...prevFilters,
+      [key]: value
+    }));
   };
 
-  useEffect(() => {
-    loadChannels();
-  }, [filters]);
+  // Clear all filters
+  const clearFilters = () => {
+    setFilters({
+      type: '',
+      category: '',
+      has_news: ''
+    });
+    setSearchTerm('');
+  };
 
   // Handle channel deletion
-  const handleDelete = async (id, name) => {
-    if (window.confirm(`Are you sure you want to delete channel "${name}"?`)) {
+  const handleDeleteChannel = async (id, channelName) => {
+    if (window.confirm(`Are you sure you want to delete channel "${channelName}"?`)) {
       try {
         await channelsAPI.deleteChannel(id);
         toast.success('Channel deleted successfully');
-        loadChannels();
+        fetchChannels(); // Refresh the list
       } catch (error) {
         console.error('Error deleting channel:', error);
         toast.error('Failed to delete channel');
@@ -46,174 +76,239 @@ const ChannelsList = () => {
     }
   };
 
-  // Handle drag end
-  const handleDragEnd = async (result) => {
-    if (!result.destination) return;
+  // Filter channels by search term and filters (client-side)
+  const filteredChannels = channels.filter(channel => {
+    // Text search
+    if (searchTerm) {
+      const searchLower = searchTerm.toLowerCase();
+      const matchesSearch = 
+        channel.name.toLowerCase().includes(searchLower) ||
+        channel.url.toLowerCase().includes(searchLower) ||
+        channel.type.toLowerCase().includes(searchLower) ||
+        channel.category.toLowerCase().includes(searchLower);
+      
+      if (!matchesSearch) return false;
+    }
+    
+    // Type filter
+    if (filters.type && channel.type !== filters.type) {
+      return false;
+    }
+    
+    // Category filter
+    if (filters.category && channel.category !== filters.category) {
+      return false;
+    }
+    
+    // Has news filter
+    if (filters.has_news !== '') {
+      const hasNewsValue = filters.has_news === 'true';
+      // Convert to boolean - handle both number (1/0) and boolean values
+      const channelHasNews = Boolean(channel.has_news);
+      if (hasNewsValue !== channelHasNews) {
+        return false;
+      }
+    }
+    
+    return true;
+  });
 
-    const items = Array.from(channels);
-    const [reorderedItem] = items.splice(result.source.index, 1);
-    items.splice(result.destination.index, 0, reorderedItem);
-
-    // Update local state immediately for smooth UI
-    setChannels(items);
-
-    // Send the new order to the server
-    try {
-      await channelsAPI.reorderChannels(items.map(channel => channel.id));
-      toast.success('Channel order updated');
-    } catch (error) {
-      console.error('Error updating channel order:', error);
-      toast.error('Failed to update channel order');
-      // Reload the original order on error
-      loadChannels();
+  // Render channel type badge
+  const renderTypeBadge = (type) => {
+    switch (type) {
+      case 'FTA':
+        return <Badge bg="primary">FTA</Badge>;
+      case 'BeIN':
+        return <Badge bg="warning" text="dark">BeIN</Badge>;
+      case 'Local':
+        return <Badge bg="success">Local</Badge>;
+      default:
+        return <Badge bg="secondary">{type}</Badge>;
     }
   };
 
-  if (loading) {
-    return <div>Loading...</div>;
-  }
-
   return (
     <Container fluid>
-      <Row className="mb-4">
-        <Col>
-          <h2>Channels</h2>
-        </Col>
-        <Col xs="auto">
-          <Link to="/channels/new">
-            <Button variant="primary">Add Channel</Button>
-          </Link>
-        </Col>
-      </Row>
-
-      {/* Filters */}
-      <Row className="mb-4">
-        <Col md={3}>
-          <Form.Group>
-            <Form.Label>Type</Form.Label>
-            <Form.Control
-              as="select"
-              value={filters.type}
-              onChange={(e) => setFilters({ ...filters, type: e.target.value })}
-            >
-              <option value="">All Types</option>
-              <option value="FTA">FTA</option>
-              <option value="Local">Local</option>
-            </Form.Control>
-          </Form.Group>
-        </Col>
-        <Col md={3}>
-          <Form.Group>
-            <Form.Label>Category</Form.Label>
-            <Form.Control
-              as="select"
-              value={filters.category}
-              onChange={(e) => setFilters({ ...filters, category: e.target.value })}
-            >
-              <option value="">All Categories</option>
-              <option value="News">News</option>
-              <option value="Sports">Sports</option>
-              <option value="Entertainment">Entertainment</option>
-            </Form.Control>
-          </Form.Group>
-        </Col>
-        <Col md={3}>
-          <Form.Group>
-            <Form.Label>Has News</Form.Label>
-            <Form.Control
-              as="select"
-              value={filters.has_news}
-              onChange={(e) => setFilters({ ...filters, has_news: e.target.value })}
-            >
-              <option value="">All</option>
-              <option value="true">Yes</option>
-              <option value="false">No</option>
-            </Form.Control>
-          </Form.Group>
-        </Col>
-      </Row>
-
-      <DragDropContext onDragEnd={handleDragEnd}>
-        <Droppable droppableId="channels">
-          {(provided) => (
-            <Table responsive hover {...provided.droppableProps} ref={provided.innerRef}>
-              <thead>
-                <tr>
-                  <th style={{ width: '40px' }}></th>
-                  <th>Logo</th>
-                  <th>Name</th>
-                  <th>Type</th>
-                  <th>Category</th>
-                  <th>Has News</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {channels.map((channel, index) => (
-                  <Draggable 
-                    key={channel.id} 
-                    draggableId={channel.id.toString()} 
-                    index={index}
-                  >
-                    {(provided, snapshot) => (
-                      <tr
-                        ref={provided.innerRef}
-                        {...provided.draggableProps}
-                        className={snapshot.isDragging ? 'dragging' : ''}
-                      >
-                        <td {...provided.dragHandleProps}>
-                          <FaGripVertical className="text-muted" />
-                        </td>
-                        <td>
-                          {channel.logo_url && (
-                            <img 
-                              src={channelsAPI.getLogoUrl(channel.logo_url)}
-                              alt={channel.name}
-                              style={{ height: '30px' }}
-                            />
-                          )}
-                        </td>
-                        <td>{channel.name}</td>
-                        <td>{channel.type}</td>
-                        <td>{channel.category}</td>
-                        <td>{channel.has_news ? 'Yes' : 'No'}</td>
-                        <td>
+      <div className="d-flex justify-content-between align-items-center">
+        <h1 className="page-title">Channels Management</h1>
+        <Link to="/channels/new" className="btn btn-primary">
+          <FaPlus className="me-2" /> Add New Channel
+        </Link>
+      </div>
+      
+      {/* Filters and Search */}
+      <Card className="mb-4">
+        <Card.Body>
+          <Row>
+            <Col md={3}>
+              <InputGroup className="mb-3">
+                <InputGroup.Text>
+                  <FaSearch />
+                </InputGroup.Text>
+                <Form.Control
+                  placeholder="Search channels..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </InputGroup>
+            </Col>
+            <Col md={3}>
+              <InputGroup className="mb-3">
+                <InputGroup.Text>
+                  <FaFilter />
+                </InputGroup.Text>
+                <Form.Select
+                  value={filters.type}
+                  onChange={(e) => handleFilterChange('type', e.target.value)}
+                >
+                  <option value="">All Types</option>
+                  <option value="FTA">FTA</option>
+                  <option value="BeIN">BeIN</option>
+                  <option value="Local">Local</option>
+                </Form.Select>
+              </InputGroup>
+            </Col>
+            <Col md={3}>
+              <InputGroup className="mb-3">
+                <InputGroup.Text>
+                  <FaFilter />
+                </InputGroup.Text>
+                <Form.Select
+                  value={filters.category}
+                  onChange={(e) => handleFilterChange('category', e.target.value)}
+                >
+                  <option value="">All Categories</option>
+                  {categories.map((category) => (
+                    <option key={category} value={category}>{category}</option>
+                  ))}
+                </Form.Select>
+              </InputGroup>
+            </Col>
+            <Col md={2}>
+              <Form.Select
+                value={filters.has_news}
+                onChange={(e) => handleFilterChange('has_news', e.target.value)}
+                className="mb-3"
+              >
+                <option value="">All News Status</option>
+                <option value="true">Has News</option>
+                <option value="false">No News</option>
+              </Form.Select>
+            </Col>
+            <Col md={1} className="text-end">
+              <Button variant="outline-secondary" onClick={clearFilters}>
+                Clear
+              </Button>
+            </Col>
+          </Row>
+        </Card.Body>
+      </Card>
+      
+      {/* Channels Table */}
+      <Card>
+        <Card.Body className="px-0"> {/* Reduced horizontal padding */}
+          {loading ? (
+            <div className="text-center py-5">
+              <div className="spinner-border text-primary" role="status">
+                <span className="visually-hidden">Loading...</span>
+              </div>
+              <p className="mt-2">Loading channels...</p>
+            </div>
+          ) : filteredChannels.length > 0 ? (
+            <div className="table-responsive">
+              <Table hover className="custom-table mx-0">
+                <thead>
+                  <tr>
+                    <th style={{ width: '60px' }}>Logo</th>
+                    <th>Name</th>
+                    <th>Type</th>
+                    <th>Category</th>
+                    <th>Has News</th>
+                    <th style={{width: '120px'}}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredChannels.map((channel) => (
+                    <tr key={channel.id}>
+                      <td>
+                        {channel.logo_url ? (
+                          <Image 
+                            src={`http://localhost:5000${channel.logo_url}`} 
+                            rounded 
+                            width="40" 
+                            height="40" 
+                            className="object-fit-cover"
+                          />
+                        ) : (
+                          <div 
+                            className="bg-secondary text-white rounded d-flex align-items-center justify-content-center"
+                            style={{ width: '40px', height: '40px' }}
+                          >
+                            <small>No Logo</small>
+                          </div>
+                        )}
+                      </td>
+                      <td>
+                        {channel.name}
+                        <div className="text-muted small text-truncate" style={{ maxWidth: '200px' }}>
+                          {channel.url}
+                        </div>
+                      </td>
+                      <td>{renderTypeBadge(channel.type)}</td>
+                      <td>{channel.category}</td>
+                      <td>
+                        {channel.has_news ? (
+                          <Badge bg="success">Yes</Badge>
+                        ) : (
+                          <Badge bg="secondary">No</Badge>
+                        )}
+                      </td>
+                      <td>
+                        <div className="d-flex">
                           <Link 
                             to={`/channels/edit/${channel.id}`}
                             className="btn btn-sm btn-outline-primary me-2"
                           >
-                            <FaEdit />
+                            <FaEdit /> Edit
                           </Link>
                           <Button
                             variant="outline-danger"
                             size="sm"
-                            onClick={() => handleDelete(channel.id, channel.name)}
+                            onClick={() => handleDeleteChannel(channel.id, channel.name)}
                           >
-                            <FaTrash />
+                            <FaTrash /> Delete
                           </Button>
-                        </td>
-                      </tr>
-                    )}
-                  </Draggable>
-                ))}
-                {provided.placeholder}
-              </tbody>
-            </Table>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </Table>
+            </div>
+          ) : (
+            <div className="text-center py-5">
+              <p className="text-muted">No channels found matching the current filters</p>
+              {(filters.type || filters.category || filters.has_news || searchTerm) && (
+                <Button variant="link" onClick={clearFilters}>
+                  Clear filters and try again
+                </Button>
+              )}
+            </div>
           )}
-        </Droppable>
-      </DragDropContext>
-
-      <style jsx>{`
-        .dragging {
-          background-color: rgba(0, 123, 255, 0.1);
-        }
-        tr {
-          cursor: move;
-        }
-        .text-muted {
-          cursor: grab;
-        }
-      `}</style>
+        </Card.Body>
+      </Card>
+      
+      {/* Debug info - only for development */}
+      {process.env.NODE_ENV === 'development' && (
+        <Card className="mt-4">
+          <Card.Header>Debug Information</Card.Header>
+          <Card.Body>
+            <p>Total channels: {channels.length}</p>
+            <p>Filtered channels: {filteredChannels.length}</p>
+            <p>Filters: {JSON.stringify(filters)}</p>
+          </Card.Body>
+        </Card>
+      )}
     </Container>
   );
 };

@@ -11,14 +11,15 @@ import {
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
-// Auth Components
-import { AuthProvider } from './components/auth/AuthContext';
-import PrivateRoute from './components/auth/PrivateRoute';
+// Auth
+import { AuthProvider } from './contexts/AuthContext';
+import PrivateRoute from './components/PrivateRoute';
 
 // Layouts
 import MainLayout from './components/layouts/MainLayout';
 
 // Pages
+import Login from './pages/auth/Login';
 import Dashboard from './pages/Dashboard';
 import DevicesList from './pages/devices/DevicesList';
 import DeviceForm from './pages/devices/DeviceForm';
@@ -27,8 +28,6 @@ import ChannelForm from './pages/channels/ChannelForm';
 import NewsList from './pages/news/NewsList';
 import NewsForm from './pages/news/NewsForm';
 import NotFound from './pages/NotFound';
-import Login from './pages/auth/Login';
-import ChangePassword from './pages/auth/ChangePassword';
 
 // Create router with future flags enabled
 const router = createBrowserRouter(
@@ -37,7 +36,7 @@ const router = createBrowserRouter(
       {/* Public Routes */}
       <Route path="/login" element={<Login />} />
 
-      {/* Protected Routes */}
+      {/* Protected Admin Routes */}
       <Route path="/" element={
         <PrivateRoute>
           <MainLayout />
@@ -60,9 +59,6 @@ const router = createBrowserRouter(
         <Route path="news" element={<NewsList />} />
         <Route path="news/new" element={<NewsForm />} />
         <Route path="news/edit/:id" element={<NewsForm />} />
-
-        {/* Change Password */}
-        <Route path="change-password" element={<ChangePassword />} />
         
         {/* Not Found */}
         <Route path="404" element={<NotFound />} />

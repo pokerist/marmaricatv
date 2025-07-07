@@ -2,10 +2,11 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
-const cookieParser = require('cookie-parser');
 const path = require('path');
 const sqlite3 = require('sqlite3').verbose();
 const fs = require('fs');
+const session = require('express-session');
+const cookieParser = require('cookie-parser');
 
 // Initialize express app
 const app = express();
@@ -15,12 +16,26 @@ const UPLOAD_DIR = process.env.UPLOAD_DIR || 'uploads';
 
 // Middleware
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:3000',
+  origin: process.env.NODE_ENV === 'production' 
+    ? 'http://155.138.231.215'
+    : 'http://localhost:3000',
   credentials: true
 }));
+app.use(cookieParser());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
-app.use(cookieParser());
+
+// Session configuration
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'your-secret-key',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    httpOnly: true,
+    secure: false, // Since we're not using HTTPS
+    maxAge: 12 * 60 * 60 * 1000 // 12 hours
+  }
+}));
 
 // Serve uploaded files
 app.use('/uploads', express.static(path.join(__dirname, UPLOAD_DIR)));
@@ -71,7 +86,6 @@ function initializeDatabase() {
     type TEXT NOT NULL,
     category TEXT NOT NULL,
     has_news BOOLEAN NOT NULL DEFAULT 0,
-    display_order INTEGER,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   )`, (err) => {
@@ -79,12 +93,6 @@ function initializeDatabase() {
       console.error('Error creating channels table:', err.message);
     } else {
       console.log('Channels table initialized');
-      // Initialize display_order for existing channels if needed
-      db.run(`
-        UPDATE channels 
-        SET display_order = id 
-        WHERE display_order IS NULL
-      `);
     }
   });
 
@@ -117,21 +125,6 @@ function initializeDatabase() {
     }
   });
 
-  // Create admins table for authentication
-  db.run(`CREATE TABLE IF NOT EXISTS admins (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT UNIQUE NOT NULL,
-    password TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-  )`, (err) => {
-    if (err) {
-      console.error('Error creating admins table:', err.message);
-    } else {
-      console.log('Admins table initialized');
-    }
-  });
-
   // Create uploads directory if it doesn't exist
   const uploadsDir = path.join(__dirname, 'uploads');
   if (!fs.existsSync(uploadsDir)) {
@@ -151,17 +144,20 @@ const dashboardRoutes = require('./routes/dashboard');
 const clientRoutes = require('./routes/client');
 const authRoutes = require('./routes/auth');
 
-// Import auth middleware
-const { authenticateAdmin } = require('./routes/middleware/auth');
+// Initialize auth table
+const { initializeAuthTable } = require('./controllers/auth');
+initializeAuthTable();
+
+// Auth middleware
+const { isAuthenticated } = require('./middleware/auth');
 
 // Use routes
 app.use('/api/auth', authRoutes);
-app.use('/api/client', clientRoutes); // Public API - no auth required
-// Protected admin routes
-app.use('/api/devices', authenticateAdmin, deviceRoutes);
-app.use('/api/channels', authenticateAdmin, channelRoutes);
-app.use('/api/news', authenticateAdmin, newsRoutes);
-app.use('/api/dashboard', authenticateAdmin, dashboardRoutes);
+app.use('/api/devices', isAuthenticated, deviceRoutes);
+app.use('/api/channels', isAuthenticated, channelRoutes);
+app.use('/api/news', isAuthenticated, newsRoutes);
+app.use('/api/dashboard', isAuthenticated, dashboardRoutes);
+app.use('/api/client', clientRoutes); // Client routes remain open
 
 // Health check route
 app.get('/api/health', (req, res) => {
