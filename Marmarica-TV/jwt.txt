@@ -1,0 +1,3 @@
+The new JWT secret is: 42071d3c4c3689661263aa44b922e68aa677d3d87e5808cd944fa4e03e91e902
+Enter admin username: adminstrator
+Enter admin password: Smart@2025#

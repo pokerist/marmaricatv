@@ -2,28 +2,6 @@
 
 A full-stack IPTV admin panel for managing devices, channels, and news for Marmarica TV. This application allows administrators to manage devices, their permissions, channels, and news content, with appropriate APIs for client devices.
 
-## Tech Stack
-
-### Frontend
-- **React.js** - Frontend library for building user interfaces
-- **React Router** - For client-side routing
-- **React Bootstrap** - UI component library
-- **Formik & Yup** - Form handling and validation
-- **Axios** - HTTP client for API requests
-- **React Icons** - Icon library
-- **React-Toastify** - For displaying notification messages
-- **React Beautiful DnD** - For drag-and-drop channel reordering
-
-### Backend
-- **Node.js** - JavaScript runtime
-- **Express** - Web framework for Node.js
-- **SQLite3** - Lightweight, serverless database
-- **Multer** - For handling file uploads (channel logos)
-- **CORS** - For cross-origin resource sharing
-- **bcrypt** - For password hashing
-- **jsonwebtoken** - For JWT-based authentication
-- **cookie-parser** - For handling HTTP cookies
-
 ## Features
 
 - **Authentication System** - Secure admin login with JWT-based session management
@@ -33,133 +11,142 @@ A full-stack IPTV admin panel for managing devices, channels, and news for Marma
 - **News Management** - CRUD operations for news articles
 - **Client APIs** - APIs for device registration, activation, and content delivery
 
-## Project Structure
+## Tech Stack
 
-```
-Marmarica-TV/
-├── client/                  # Frontend React application
-│   ├── public/              # Static files
-│   └── src/                 # React source code
-│       ├── components/      # Reusable components
-│       │   ├── auth/        # Authentication components
-│       │   └── layouts/     # Layout components
-│       ├── pages/           # Page components
-│       │   ├── auth/        # Authentication pages
-│       │   ├── channels/    # Channel management pages
-│       │   ├── devices/     # Device management pages
-│       │   └── news/        # News management pages
-│       ├── services/        # API services
-│       └── utils/           # Utility functions
-├── server/                  # Backend Node.js application
-│   ├── controllers/         # API controllers
-│   ├── models/              # Database models
-│   ├── routes/             # API routes
-│   │   ├── middleware/     # Auth middleware
-│   │   └── auth.js        # Auth routes
-│   ├── scripts/           # Admin setup scripts
-│   ├── uploads/           # Folder for channel logos
-│   ├── database.sqlite    # SQLite database file
-│   └── index.js           # Server entry point
-└── README.md              # Project documentation
-```
+### Frontend
+- React.js with React Router
+- React Bootstrap for UI components
+- Formik & Yup for form handling
+- React Beautiful DnD for channel reordering
+- Axios for API requests
 
-## Authentication System
+### Backend
+- Node.js with Express
+- SQLite3 database
+- JWT authentication
+- File upload handling with Multer
 
-### Initial Setup
+## Quick Start
 
-1. **Create Initial Admin Account**
+1. **Clone Repository**
+   ```bash
+   git clone https://github.com/pokerist/marmaricatv.git
+   cd marmaricatv
+   ```
+
+2. **Install Dependencies**
+
+   Server:
    ```bash
    cd server
-   node scripts/setup-admin.js
+   npm install
    ```
-   This script will:
-   - Prompt for admin username and password
-   - Create the admin account with securely hashed password
-   - Save credentials backup to admin-credentials.txt
 
-2. **Reset Admin Password**
-   If you need to reset the admin password:
+   Client:
+   ```bash
+   cd ../client
+   npm install
+   ```
+
+3. **Environment Setup**
+
+   Server (.env):
+   ```
+   NODE_ENV=development
+   PORT=5000
+   UPLOAD_DIR=uploads
+   CLIENT_URL=http://localhost:3000
+   JWT_SECRET=your-dev-secret
+   JWT_EXPIRY=12h
+   ```
+
+   Client (.env):
+   ```
+   REACT_APP_API_URL=http://localhost:5000/api
+   REACT_APP_UPLOADS_URL=http://localhost:5000/uploads
+   ```
+
+4. **Initialize Database**
+   ```bash
+   cd ../server
+   node scripts/setup-admin.js
+   node scripts/update-channels-order.js
+   ```
+
+5. **Start Development Servers**
+
+   Server:
    ```bash
    cd server
-   node scripts/setup-admin.js
+   npm run dev
    ```
-   Choose 'yes' when prompted about existing admin account.
 
-### Security Features
+   Client:
+   ```bash
+   cd client
+   npm start
+   ```
 
-- Password hashing using bcrypt
-- JWT-based authentication with HTTP-only cookies
-- Session expiry after 12 hours (configurable)
-- Protected admin routes
-- Public APIs remain accessible for TV devices
+## Production Deployment
 
-## Channel Management
-
-### Channel Ordering
-
-Channels can now be manually reordered using drag-and-drop in the admin panel. The order is preserved and used when returning channels to TV devices.
-
-To reorder channels:
-1. Go to the Channels page in the admin panel
-2. Use the drag handle (⋮) to drag channels to their desired position
-3. Changes are automatically saved to the server
-
-The channel order is maintained separately from other attributes like name or type, allowing for custom organization regardless of other properties.
-
-[Previous installation and deployment instructions remain the same...]
+For production deployment instructions, see [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ## API Documentation
 
-### Authentication APIs
+- [Admin API Documentation](API_DOCUMENTATION.md)
+- [Client API Documentation](CLIENT_API_DOCUMENTATION.md)
 
-#### Admin Login
-- **URL**: `/api/auth/login`
-- **Method**: `POST`
-- **Body**: 
-  ```json
-  {
-    "username": "admin",
-    "password": "your-password"
-  }
-  ```
-- **Response**: Sets HTTP-only cookie with JWT token
+## Project Structure
 
-#### Admin Logout
-- **URL**: `/api/auth/logout`
-- **Method**: `POST`
-- **Response**: Clears authentication cookie
+```
+marmaricatv/
+├── client/                  # Frontend React application
+│   ├── public/             # Static files
+│   └── src/                # React source code
+│       ├── components/     # Reusable components
+│       ├── pages/         # Page components
+│       ├── services/      # API services
+│       └── utils/         # Utility functions
+├── server/                 # Backend Node.js application
+│   ├── controllers/       # API controllers
+│   ├── models/           # Database models
+│   ├── routes/          # API routes
+│   ├── scripts/        # Setup scripts
+│   ├── uploads/       # Channel logos
+│   └── index.js      # Server entry point
+└── README.md
+```
 
-#### Change Password
-- **URL**: `/api/auth/change-password`
-- **Method**: `POST`
-- **Body**: 
-  ```json
-  {
-    "currentPassword": "current-password",
-    "newPassword": "new-password"
-  }
-  ```
-- **Response**: Success message or error
+## Development
 
-### Channel Ordering API
+1. **Database Updates**
+   - Channel ordering: `node server/scripts/update-channels-order.js`
+   - Reset admin: `node server/scripts/setup-admin.js`
 
-#### Update Channel Order
-- **URL**: `/api/channels/reorder`
-- **Method**: `POST`
-- **Body**: 
-  ```json
-  {
-    "orderedIds": [1, 3, 2, 4]  // Array of channel IDs in desired order
-  }
-  ```
-- **Response**: Success message or error
+2. **Environment Configuration**
+   - Development: Use .env files in server and client directories
+   - Production: Use .env.production in server directory
 
-[Previous API documentation remains the same...]
+3. **API Testing**
+   - Admin APIs require authentication
+   - Client APIs are public but require valid device ID
 
-## License
+## Maintenance
 
-This project is proprietary and confidential. Unauthorized copying, modification, distribution, or use of this software is strictly prohibited.
+1. **Backups**
+   - Database and uploads are backed up daily
+   - Backups are stored in /var/backups/marmarica-tv
+   - 30-day retention policy
+
+2. **Monitoring**
+   - Use PM2 for process management
+   - Check logs in ~/.pm2/logs/
+   - Monitor server resources
 
 ## Support
 
 For support and inquiries, please contact the project maintainer.
+
+## License
+
+This project is proprietary and confidential. Unauthorized copying, modification, distribution, or use of this software is strictly prohibited.

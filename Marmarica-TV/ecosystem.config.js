@@ -1,28 +1,19 @@
 module.exports = {
-  apps: [
-    {
-      name: 'alkarma-tv-server',
-      script: 'server/index.js',
-      watch: ['server'],
-      env: {
-        NODE_ENV: 'development',
-      },
-      env_production: {
-        NODE_ENV: 'production',
-      }
+  apps: [{
+    name: 'marmarica-tv',
+    script: 'server/index.js',
+    env_production: {
+      NODE_ENV: 'production',
+      PORT: 80
     },
-    {
-      name: 'alkarma-tv-client',
-      script: 'node_modules/.bin/react-scripts',
-      args: 'start',
-      cwd: './client',
-      watch: false,
-      env: {
-        NODE_ENV: 'development',
-      },
-      env_production: {
-        NODE_ENV: 'production',
-      }
-    }
-  ]
+    instances: 1,
+    autorestart: true,
+    watch: false,
+    max_memory_restart: '1G',
+    env_file: 'server/.env.production',
+    error_file: 'logs/error.log',
+    out_file: 'logs/output.log',
+    log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+    merge_logs: true
+  }]
 };
