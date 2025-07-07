@@ -155,12 +155,12 @@ export const channelsAPI = {
     if (filters.category) queryParams.append('category', filters.category);
     if (filters.has_news !== undefined) queryParams.append('has_news', filters.has_news);
     
-    return retryRequest(() => api.get(`/channels?${queryParams.toString()}`));
+    return retryRequest(() => api.get(`/channels?${queryParams.toString()}`, { withCredentials: true }));
   },
-  getChannelById: (id) => retryRequest(() => api.get(`/channels/${id}`)),
-  createChannel: (channelData) => retryRequest(() => api.post('/channels', channelData)),
-  updateChannel: (id, channelData) => retryRequest(() => api.put(`/channels/${id}`, channelData)),
-  deleteChannel: (id) => retryRequest(() => api.delete(`/channels/${id}`)),
+  getChannelById: (id) => retryRequest(() => api.get(`/channels/${id}`, { withCredentials: true })),
+  createChannel: (channelData) => retryRequest(() => api.post('/channels', channelData, { withCredentials: true })),
+  updateChannel: (id, channelData) => retryRequest(() => api.put(`/channels/${id}`, channelData, { withCredentials: true })),
+  deleteChannel: (id) => retryRequest(() => api.delete(`/channels/${id}`, { withCredentials: true })),
   uploadLogo: (id, logoFile) => {
     const formData = new FormData();
     formData.append('logo', logoFile);
@@ -169,10 +169,12 @@ export const channelsAPI = {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
+      withCredentials: true,
       // Longer timeout for file uploads (double the normal timeout)
       timeout: API_TIMEOUT * 2, 
     }));
   },
+  reorderChannels: (orderedIds) => retryRequest(() => api.post('/channels/reorder', { orderedIds }, { withCredentials: true })),
   
   // Helper method to get complete logo URL
   getLogoUrl: (logoPath) => {

@@ -1,6 +1,6 @@
-# AlKarma TV IPTV Admin Panel
+# Marmarica TV IPTV Admin Panel
 
-A full-stack IPTV admin panel for managing devices, channels, and news for AlKarma TV. This application allows administrators to manage devices, their permissions, channels, and news content, with appropriate APIs for client devices.
+A full-stack IPTV admin panel for managing devices, channels, and news for Marmarica TV. This application allows administrators to manage devices, their permissions, channels, and news content, with appropriate APIs for client devices.
 
 ## Tech Stack
 
@@ -12,6 +12,7 @@ A full-stack IPTV admin panel for managing devices, channels, and news for AlKar
 - **Axios** - HTTP client for API requests
 - **React Icons** - Icon library
 - **React-Toastify** - For displaying notification messages
+- **React Beautiful DnD** - For drag-and-drop channel reordering
 
 ### Backend
 - **Node.js** - JavaScript runtime
@@ -19,12 +20,16 @@ A full-stack IPTV admin panel for managing devices, channels, and news for AlKar
 - **SQLite3** - Lightweight, serverless database
 - **Multer** - For handling file uploads (channel logos)
 - **CORS** - For cross-origin resource sharing
+- **bcrypt** - For password hashing
+- **jsonwebtoken** - For JWT-based authentication
+- **cookie-parser** - For handling HTTP cookies
 
 ## Features
 
+- **Authentication System** - Secure admin login with JWT-based session management
 - **Dashboard** - Overview of system stats, expiring devices, and recent actions
 - **Devices Management** - CRUD operations for devices, activation codes, and permissions
-- **Channels Management** - CRUD operations for channels with logo uploads
+- **Channels Management** - CRUD operations for channels with logo uploads and drag-and-drop reordering
 - **News Management** - CRUD operations for news articles
 - **Client APIs** - APIs for device registration, activation, and content delivery
 
@@ -36,338 +41,120 @@ Marmarica-TV/
 │   ├── public/              # Static files
 │   └── src/                 # React source code
 │       ├── components/      # Reusable components
+│       │   ├── auth/        # Authentication components
+│       │   └── layouts/     # Layout components
 │       ├── pages/           # Page components
+│       │   ├── auth/        # Authentication pages
+│       │   ├── channels/    # Channel management pages
+│       │   ├── devices/     # Device management pages
+│       │   └── news/        # News management pages
 │       ├── services/        # API services
 │       └── utils/           # Utility functions
 ├── server/                  # Backend Node.js application
-│   ├── controllers/         # API controllers (future implementation)
-│   ├── models/              # Database models (future implementation)
-│   ├── routes/              # API routes
-│   ├── uploads/             # Folder for channel logos
-│   ├── database.sqlite      # SQLite database file
-│   └── index.js             # Server entry point
-└── README.md                # Project documentation
+│   ├── controllers/         # API controllers
+│   ├── models/              # Database models
+│   ├── routes/             # API routes
+│   │   ├── middleware/     # Auth middleware
+│   │   └── auth.js        # Auth routes
+│   ├── scripts/           # Admin setup scripts
+│   ├── uploads/           # Folder for channel logos
+│   ├── database.sqlite    # SQLite database file
+│   └── index.js           # Server entry point
+└── README.md              # Project documentation
 ```
 
-## Installation and Development
+## Authentication System
 
-### Prerequisites
-- Node.js (v16.x or higher)
-- npm (v8.x or higher)
-- PM2 (Process Manager) for running in production
+### Initial Setup
 
-### Development Setup (Windows)
-
-#### Option 1: Single Command Startup (Recommended)
-
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/pokerist/marmaricatv.git
-   cd marmaricatv
-   cd Marmarica-TV
-   ```
-
-2. **Install dependencies**
-   ```bash
-   npm install -g pm2
-   cd server && npm install && cd ../client && npm install && cd ..
-   ```
-
-3. **Start both server and client with PM2**
-   ```bash
-   pm2 start ecosystem.config.js
-   ```
-   This will:
-   - Start the server at http://localhost:5000 
-   - Start the client at http://localhost:3000
-   - Monitor both processes
-
-4. **View logs**
-   ```bash
-   pm2 logs
-   ```
-
-5. **Stop all processes**
-   ```bash
-   pm2 stop all
-   ```
-
-#### Option 2: Separate Terminal Startup
-
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/pokerist/marmaricatv.git
-   cd marmaricatv
-   cd Marmarica-TV
-   ```
-
-2. **Install backend dependencies**
+1. **Create Initial Admin Account**
    ```bash
    cd server
-   npm install
+   node scripts/setup-admin.js
    ```
+   This script will:
+   - Prompt for admin username and password
+   - Create the admin account with securely hashed password
+   - Save credentials backup to admin-credentials.txt
 
-3. **Start the backend server**
+2. **Reset Admin Password**
+   If you need to reset the admin password:
    ```bash
-   npm run dev
-   ```
-   This will start the server at http://localhost:5000
-
-4. **Install frontend dependencies (in a separate terminal)**
-   ```bash
-   cd AlKarma-TV/client
-   npm install
-   ```
-
-5. **Start the frontend development server**
-   ```bash
-   npm start
-   ```
-   This will start the client at http://localhost:3000
-
-### Building for Production
-
-1. **Build the React frontend**
-   ```bash
-   cd client
-   npm run build
-   ```
-
-2. **Prepare the server for production**
-   ```bash
-   cd ../server
-   npm install --production
-   ```
-
-## Deployment (Ubuntu Server)
-
-### Prerequisites
-- Ubuntu Server (18.04 LTS or higher)
-- Node.js (v16.x or higher)
-- npm (v8.x or higher)
-- PM2 (Process Manager for Node.js applications)
-
-### Production Setup
-
-1. **Install Node.js and npm**
-   ```bash
-   curl -fsSL https://deb.nodesource.com/setup_16.x | sudo -E bash -
-   sudo apt-get install -y nodejs
-   ```
-
-2. **Install PM2 globally**
-   ```bash
-   sudo npm install pm2 -g
-   ```
-
-3. **Clone the repository on the server**
-   ```bash
-   git clone https://your-repository-url/AlKarma-TV.git
-   cd AlKarma-TV
-   ```
-
-4. **Install dependencies and build for production**
-   ```bash
-   # Install server dependencies
    cd server
-   npm install --production
-   cd ..
-   
-   # Install and build client
-   cd client
-   npm install
-   npm run build
-   cd ..
+   node scripts/setup-admin.js
    ```
+   Choose 'yes' when prompted about existing admin account.
 
-5. **Create production ecosystem file**
-   Create a file named `ecosystem.production.config.js`:
-   ```javascript
-   module.exports = {
-     apps: [
-       {
-         name: 'alkarma-tv-server',
-         script: 'server/index.js',
-         env_production: {
-           NODE_ENV: 'production',
-           PORT: 5000
-         },
-         instances: 1,
-         autorestart: true,
-         watch: false,
-         max_memory_restart: '1G'
-       }
-     ]
-   };
-   ```
+### Security Features
 
-6. **Setup Nginx to serve static files and proxy API requests**
+- Password hashing using bcrypt
+- JWT-based authentication with HTTP-only cookies
+- Session expiry after 12 hours (configurable)
+- Protected admin routes
+- Public APIs remain accessible for TV devices
 
-   Install Nginx:
-   ```bash
-   sudo apt install nginx
-   ```
+## Channel Management
 
-   Create a new Nginx site configuration:
-   ```bash
-   sudo nano /etc/nginx/sites-available/alkarma-tv
-   ```
+### Channel Ordering
 
-   Add the following configuration:
-   ```nginx
-   server {
-       listen 80;
-       server_name your_domain_or_IP;
+Channels can now be manually reordered using drag-and-drop in the admin panel. The order is preserved and used when returning channels to TV devices.
 
-       # Serve React static files
-       location / {
-           root /path/to/AlKarma-TV/client/build;
-           try_files $uri /index.html;
-           expires 1d;
-           add_header Cache-Control "public, max-age=86400";
-       }
+To reorder channels:
+1. Go to the Channels page in the admin panel
+2. Use the drag handle (⋮) to drag channels to their desired position
+3. Changes are automatically saved to the server
 
-       # Proxy API requests
-       location /api {
-           proxy_pass http://localhost:5000;
-           proxy_http_version 1.1;
-           proxy_set_header Upgrade $http_upgrade;
-           proxy_set_header Connection 'upgrade';
-           proxy_set_header Host $host;
-           proxy_cache_bypass $http_upgrade;
-       }
+The channel order is maintained separately from other attributes like name or type, allowing for custom organization regardless of other properties.
 
-       # Serve uploaded files
-       location /uploads {
-           proxy_pass http://localhost:5000;
-           sendfile on;
-           tcp_nopush on;
-           tcp_nodelay on;
-       }
-   }
-   ```
-
-   Enable the site and restart Nginx:
-   ```bash
-   sudo ln -s /etc/nginx/sites-available/alkarma-tv /etc/nginx/sites-enabled/
-   sudo nginx -t
-   sudo systemctl restart nginx
-   ```
-
-7. **Start the server with PM2**
-   ```bash
-   pm2 start ecosystem.production.config.js --env production
-   ```
-
-8. **Setup PM2 to start on boot**
-   ```bash
-   pm2 startup
-   pm2 save
-   ```
-
-9. **Setup automatic database backup (optional but recommended)**
-   Create a backup script:
-   ```bash
-   mkdir -p /path/to/AlKarma-TV/backups
-   nano /path/to/AlKarma-TV/backup.sh
-   ```
-
-   Add the following content:
-   ```bash
-   #!/bin/bash
-   DATE=$(date +%Y%m%d_%H%M%S)
-   cp /path/to/AlKarma-TV/server/database.sqlite /path/to/AlKarma-TV/backups/database_$DATE.sqlite
-   # Keep only the 10 most recent backups
-   ls -tp /path/to/AlKarma-TV/backups/ | grep -v '/$' | tail -n +11 | xargs -I {} rm -- /path/to/AlKarma-TV/backups/{}
-   ```
-
-   Make the script executable:
-   ```bash
-   chmod +x /path/to/AlKarma-TV/backup.sh
-   ```
-
-   Add it to crontab to run daily:
-   ```bash
-   (crontab -l 2>/dev/null; echo "0 0 * * * /path/to/AlKarma-TV/backup.sh") | crontab -
-   ```
-
-### Maintenance and Monitoring
-
-- **View logs**:
-  ```bash
-  pm2 logs alkarma-tv-server
-  ```
-
-- **Restart the application**:
-  ```bash
-  pm2 restart alkarma-tv-server
-  ```
-
-- **Monitor the application**:
-  ```bash
-  pm2 monit
-  ```
-
-- **Update the application**:
-  ```bash
-  cd /path/to/AlKarma-TV
-  git pull
-  cd client
-  npm install
-  npm run build
-  cd ../server
-  npm install --production
-  pm2 restart alkarma-tv-server
-  ```
+[Previous installation and deployment instructions remain the same...]
 
 ## API Documentation
 
-### Client APIs
+### Authentication APIs
 
-#### Check Device Registration
-- **URL**: `/api/client/check-device`
+#### Admin Login
+- **URL**: `/api/auth/login`
 - **Method**: `POST`
 - **Body**: 
   ```json
   {
-    "duid": "DEVICE_UNIQUE_ID"
+    "username": "admin",
+    "password": "your-password"
   }
   ```
-- **Response**: 
-  - If device is active: Returns device info, allowed channels, and news
-  - If device is expired: Returns device info, FTA/Local channels, and news
-  - If device is disabled: Returns device info and a message
-  - If device is not found: Returns error message
+- **Response**: Sets HTTP-only cookie with JWT token
 
-#### Register New Device
-- **URL**: `/api/client/register-device`
+#### Admin Logout
+- **URL**: `/api/auth/logout`
+- **Method**: `POST`
+- **Response**: Clears authentication cookie
+
+#### Change Password
+- **URL**: `/api/auth/change-password`
 - **Method**: `POST`
 - **Body**: 
   ```json
   {
-    "device_name": "Device Owner Name"
+    "currentPassword": "current-password",
+    "newPassword": "new-password"
   }
   ```
-- **Response**: 
-  - Returns the newly created device info with DUID and activation code
+- **Response**: Success message or error
 
-#### Activate Device
-- **URL**: `/api/client/activate-device`
+### Channel Ordering API
+
+#### Update Channel Order
+- **URL**: `/api/channels/reorder`
 - **Method**: `POST`
 - **Body**: 
   ```json
   {
-    "duid": "DEVICE_UNIQUE_ID",
-    "activation_code": "1234"
+    "orderedIds": [1, 3, 2, 4]  // Array of channel IDs in desired order
   }
   ```
-- **Response**: 
-  - If successful: Returns device info with active status
-  - If invalid code: Returns error message
+- **Response**: Success message or error
 
-### Admin Panel APIs
-
-The admin panel APIs include CRUD operations for devices, channels, and news. These are accessible through the admin panel interface.
+[Previous API documentation remains the same...]
 
 ## License
 

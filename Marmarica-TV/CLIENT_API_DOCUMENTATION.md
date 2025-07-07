@@ -1,442 +1,250 @@
-# AlKarma TV IPTV - Client API Documentation
+# Marmarica TV Client API Documentation
 
-This document provides detailed documentation for the Client API endpoints in the AlKarma TV IPTV system. These APIs are specifically designed for client applications (IPTV boxes, mobile apps, etc.) to interact with the system.
-
-## Table of Contents
-- [Base URL](#base-url)
-- [Authentication](#authentication)
-- [Client API Endpoints](#client-api-endpoints)
-  - [Check Device Status](#check-device-status)
-  - [Register New Device](#register-new-device)
-  - [Activate Device](#activate-device)
-- [Error Handling](#error-handling)
-- [Integration Examples](#integration-examples)
+This document outlines the public API endpoints available for TV devices to interact with the Marmarica TV IPTV system.
 
 ## Base URL
-
-All API endpoints are relative to the base URL:
-
 ```
-http://your-server-address:5000/api/client
-```
-
-In development environments, this will typically be:
-
-```
-http://localhost:5000/api/client
+http://your-server-domain/api/client
 ```
 
 ## Authentication
+Client APIs are public and do not require authentication. However, device validation is performed using the Device Unique ID (DUID) and activation status.
 
-The client APIs do not require authentication tokens. Instead, they use device identifiers (DUID) and activation codes for verification.
+## Endpoints
 
-## Client API Endpoints
+### Check Device Registration
+Validates a device's registration status and returns appropriate content based on the device's status.
 
-### Check Device Status
+```http
+POST /check-device
+```
 
-Checks if a device is registered and returns the appropriate content based on the device's status.
-
-- **URL**: `/check-device`
-- **Method**: `POST`
-- **Content-Type**: `application/json`
-- **Request Body**:
-  - `duid` (required): Device Unique Identifier
-
-#### Example Request:
+**Request Body:**
 ```json
-POST /api/client/check-device
-Content-Type: application/json
-
 {
-  "duid": "195C5756E85D88A"
+  "duid": "DEVICE_UNIQUE_ID"
 }
 ```
 
-#### Example Responses:
-
-##### 1. Active Device:
-```json
-HTTP/1.1 200 OK
-Content-Type: application/json
-
-{
-  "status": "active",
-  "message": "Device active",
-  "data": {
+**Response:**
+- Device Active:
+  ```json
+  {
+    "status": "active",
     "device": {
-      "duid": "195C5756E85D88A",
-      "owner_name": "Updated Test User",
-      "status": "active",
-      "expiry_date": "2026-03-24",
-      "allowed_types": "FTA,Local"
+      "id": 1,
+      "duid": "DEVICE_UNIQUE_ID",
+      "owner_name": "John Doe",
+      "allowed_types": "FTA,Local,Premium",
+      "expiry_date": "2024-12-31",
+      "status": "active"
     },
-    "news": [
-      {
-        "id": 2,
-        "title": "API Test News",
-        "body": "This news was created via API testing",
-        "created_at": "2025-03-24T00:02:56.608Z",
-        "updated_at": "2025-03-24T00:02:56.608Z"
-      },
+    "channels": [
       {
         "id": 1,
-        "title": "test",
-        "body": "بسم الله الرحمن الرحيم وبه نستعين",
-        "created_at": "2025-03-23T20:41:28.775Z",
-        "updated_at": "2025-03-23T20:41:28.775Z"
+        "name": "Channel Name",
+        "url": "stream_url",
+        "logo_url": "logo_url",
+        "type": "FTA",
+        "category": "News",
+        "has_news": true
       }
     ],
-    "channels": [
-      {
-        "id": 4,
-        "name": "Channel Name 1",
-        "url": "rtsp://example.com/stream1",
-        "logo_url": "/uploads/channel-1742770423059-779571465.jpeg",
-        "type": "Local",
-        "category": "Movies",
-        "has_news": 1,
-        "created_at": "2025-03-23T22:53:43.040Z",
-        "updated_at": "2025-03-23T22:53:43.063Z"
-      },
-      {
-        "id": 2,
-        "name": "Channel Name 2",
-        "url": "rtsp://example.com/stream2",
-        "logo_url": "/uploads/channel-1742761614998-390365615.png",
-        "type": "FTA",
-        "category": "General",
-        "has_news": 0,
-        "created_at": "2025-03-23T20:26:54.975Z",
-        "updated_at": "2025-03-23T20:26:55.000Z"
-      },
-      // Additional channels...
-    ]
-  }
-}
-```
-
-##### 2. Expired Device:
-```json
-HTTP/1.1 200 OK
-Content-Type: application/json
-
-{
-  "status": "expired",
-  "message": "Your subscription has ended. You can only view Free-To-Air and Local channels now.",
-  "data": {
-    "device": {
-      "duid": "195C4AD6A2F5F96",
-      "owner_name": "Example User",
-      "status": "expired",
-      "expiry_date": "2024-03-23"
-    },
     "news": [
-      // All news items...
-    ],
-    "channels": [
-      // Only FTA and Local channels (BeIN channels are excluded)...
+      {
+        "id": 1,
+        "title": "News Title",
+        "body": "News Content",
+        "created_at": "2023-12-31T12:00:00Z"
+      }
     ]
   }
-}
-```
+  ```
 
-##### 3. Disabled Device:
-```json
-HTTP/1.1 200 OK
-Content-Type: application/json
-
-{
-  "status": "disabled",
-  "message": "Your device has been disabled by the administrator. Please contact support for more information.",
-  "data": {
+- Device Expired:
+  ```json
+  {
+    "status": "expired",
+    "message": "Device subscription has expired",
     "device": {
-      "duid": "195C4B197334637",
-      "owner_name": "Example User",
-      "status": "disabled"
+      // Device info
+    },
+    "channels": [
+      // Only FTA and Local channels
+    ],
+    "news": [
+      // News items
+    ]
+  }
+  ```
+
+- Device Disabled:
+  ```json
+  {
+    "status": "disabled",
+    "message": "Device is disabled",
+    "device": {
+      // Device info
     }
   }
-}
-```
+  ```
 
-##### 4. Device Not Found:
-```json
-HTTP/1.1 404 Not Found
-Content-Type: application/json
-
-{
-  "error": "Device not registered",
-  "message": "Device not registered. Please register your device first."
-}
-```
-
-##### 5. Error Response:
-```json
-HTTP/1.1 400 Bad Request
-Content-Type: application/json
-
-{
-  "error": "Device ID (DUID) is required"
-}
-```
+- Device Not Found:
+  ```json
+  {
+    "error": "Device not found"
+  }
+  ```
 
 ### Register New Device
+Registers a new device in the system.
 
-Registers a new device in the system using the provided DUID (Device Unique Identifier) and returns an activation code.
+```http
+POST /register-device
+```
 
-- **URL**: `/register-device`
-- **Method**: `POST`
-- **Content-Type**: `application/json`
-- **Request Body**:
-  - `duid` (required): Device Unique Identifier to register
-
-#### Example Request:
+**Request Body:**
 ```json
-POST /api/client/register-device
-Content-Type: application/json
-
 {
-  "duid": "195C68F32A17B98"
+  "device_name": "Device Owner Name"
 }
 ```
 
-#### Example Response:
+**Response:**
 ```json
-HTTP/1.1 201 Created
-Content-Type: application/json
-
 {
-  "message": "Device successfully created",
-  "data": {
-    "duid": "195C68F32A17B98",
-    "activation_code": "5634",
-    "owner_name": "",
+  "message": "Device registered successfully",
+  "device": {
+    "id": 1,
+    "duid": "GENERATED_DUID",
+    "activation_code": "1234",
+    "owner_name": "Device Owner Name",
+    "allowed_types": "FTA,Local",
+    "expiry_date": null,
     "status": "disabled",
-    "expiry_date": "2026-03-24"
+    "created_at": "2023-12-31T12:00:00Z"
   }
-}
-```
-
-#### Error Response:
-```json
-HTTP/1.1 400 Bad Request
-Content-Type: application/json
-
-{
-  "error": "Device ID (DUID) is required for registration"
 }
 ```
 
 ### Activate Device
+Activates a device using its activation code.
 
-Activates a device using its DUID and activation code. This changes the device status from "disabled" to "active".
+```http
+POST /activate-device
+```
 
-- **URL**: `/activate-device`
-- **Method**: `POST`
-- **Content-Type**: `application/json`
-- **Request Body**:
-  - `duid` (required): Device Unique Identifier
-  - `activation_code` (required): 4-digit activation code provided during registration
-
-#### Example Request:
+**Request Body:**
 ```json
-POST /api/client/activate-device
-Content-Type: application/json
-
 {
-  "duid": "195C68F32A17B98",
-  "activation_code": "5634"
+  "duid": "DEVICE_UNIQUE_ID",
+  "activation_code": "1234"
 }
 ```
 
-#### Example Response (Success):
-```json
-HTTP/1.1 200 OK
-Content-Type: application/json
-
-{
-  "message": "Device activated successfully",
-  "data": {
-    "duid": "195C68F32A17B98",
-    "owner_name": "Living Room TV",
-    "status": "active",
-    "expiry_date": "2026-03-24",
-    "allowed_types": "FTA,Local"
+**Response:**
+- Success:
+  ```json
+  {
+    "message": "Device activated successfully",
+    "device": {
+      "id": 1,
+      "duid": "DEVICE_UNIQUE_ID",
+      "owner_name": "Device Owner Name",
+      "allowed_types": "FTA,Local",
+      "expiry_date": "2024-12-31",
+      "status": "active"
+    }
   }
-}
-```
+  ```
 
-#### Error Responses:
-
-##### 1. Invalid Activation Code:
-```json
-HTTP/1.1 400 Bad Request
-Content-Type: application/json
-
-{
-  "error": "Invalid activation code"
-}
-```
-
-##### 2. Device Already Activated:
-```json
-HTTP/1.1 400 Bad Request
-Content-Type: application/json
-
-{
-  "error": "Device is already activated",
-  "device": {
-    "duid": "195C68F32A17B98",
-    "owner_name": "Living Room TV", 
-    "status": "active",
-    "expiry_date": "2026-03-24"
+- Invalid Code:
+  ```json
+  {
+    "error": "Invalid activation code"
   }
-}
+  ```
+
+### Get Channels
+Retrieves the list of channels available to the device based on its status and permissions.
+
+```http
+GET /channels?duid=DEVICE_UNIQUE_ID
 ```
 
-##### 3. Device Not Found:
+**Response:**
 ```json
-HTTP/1.1 404 Not Found
-Content-Type: application/json
-
 {
-  "error": "Device not found"
+  "channels": [
+    {
+      "id": 1,
+      "name": "Channel Name",
+      "url": "stream_url",
+      "logo_url": "logo_url",
+      "type": "FTA",
+      "category": "News",
+      "has_news": true,
+      "display_order": 1
+    }
+  ]
 }
 ```
 
-##### 4. Missing Parameters:
+### Get News
+Retrieves the latest news items.
+
+```http
+GET /news?duid=DEVICE_UNIQUE_ID
+```
+
+**Response:**
 ```json
-HTTP/1.1 400 Bad Request
-Content-Type: application/json
-
 {
-  "error": "Both device ID (DUID) and activation code are required"
+  "news": [
+    {
+      "id": 1,
+      "title": "News Title",
+      "body": "News Content",
+      "created_at": "2023-12-31T12:00:00Z"
+    }
+  ]
 }
 ```
 
-## Error Handling
+## Error Responses
 
-The API uses standard HTTP status codes to indicate the success or failure of requests:
+All endpoints may return the following error responses:
 
-- `200 OK`: The request was successful
-- `201 Created`: A new resource was successfully created
-- `400 Bad Request`: The request was malformed or missing required parameters
-- `404 Not Found`: The requested resource (device) could not be found
-- `500 Internal Server Error`: An unexpected error occurred on the server
-
-All error responses include a JSON object with an `error` field containing a description of the error.
-
-## Integration Examples
-
-### Integration Flow
-
-A typical client integration flow would be:
-
-1. **First Time Setup**:
-   - Call `/register-device` to get a DUID and activation code
-   - Display the DUID and activation code to the user
-   - Call `/activate-device` with the DUID and activation code
-
-2. **Normal Operation**:
-   - Store the DUID securely on the client device
-   - Call `/check-device` on startup to retrieve channels and news
-   - Display appropriate content based on the device status
-
-### Android Integration Example
-
-```java
-// Example using OkHttp and Gson
-OkHttpClient client = new OkHttpClient();
-Gson gson = new Gson();
-
-// Check device status
-void checkDeviceStatus(String duid) {
-    MediaType JSON = MediaType.parse("application/json; charset=utf-8");
-    JSONObject jsonObject = new JSONObject();
-    jsonObject.put("duid", duid);
-    
-    RequestBody body = RequestBody.create(jsonObject.toString(), JSON);
-    Request request = new Request.Builder()
-        .url("http://your-server-address:5000/api/client/check-device")
-        .post(body)
-        .build();
-        
-    client.newCall(request).enqueue(new Callback() {
-        @Override
-        public void onFailure(Call call, IOException e) {
-            // Handle connection error
-        }
-        
-        @Override
-        public void onResponse(Call call, Response response) {
-            if (response.isSuccessful()) {
-                String responseBody = response.body().string();
-                DeviceResponse deviceResponse = gson.fromJson(responseBody, DeviceResponse.class);
-                
-                // Handle different statuses
-                switch (deviceResponse.status) {
-                    case "active":
-                        // Show all channels
-                        break;
-                    case "expired":
-                        // Show notification + FTA/Local channels only
-                        break;
-                    case "disabled":
-                        // Show error message
-                        break;
-                }
-            } else {
-                // Handle error
-            }
-        }
-    });
+### 400 Bad Request
+```json
+{
+  "error": "Description of what went wrong"
 }
 ```
 
-### iOS Integration Example
-
-```swift
-// Example using URLSession and Codable
-func checkDeviceStatus(duid: String) {
-    guard let url = URL(string: "http://your-server-address:5000/api/client/check-device") else { return }
-    
-    var request = URLRequest(url: url)
-    request.httpMethod = "POST"
-    request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-    
-    let body: [String: Any] = ["duid": duid]
-    request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-    
-    URLSession.shared.dataTask(with: request) { data, response, error in
-        guard let data = data, error == nil else {
-            // Handle connection error
-            return
-        }
-        
-        do {
-            let decoder = JSONDecoder()
-            let deviceResponse = try decoder.decode(DeviceResponse.self, from: data)
-            
-            // Handle different statuses
-            switch deviceResponse.status {
-            case "active":
-                // Show all channels
-                break
-            case "expired":
-                // Show notification + FTA/Local channels only
-                break
-            case "disabled":
-                // Show error message
-                break
-            default:
-                break
-            }
-        } catch {
-            // Handle parsing error
-        }
-    }.resume()
+### 404 Not Found
+```json
+{
+  "error": "Resource not found"
 }
 ```
 
----
+### 500 Internal Server Error
+```json
+{
+  "error": "Internal server error"
+}
+```
 
-This documentation covers all available client API endpoints in the AlKarma TV IPTV system. For any issues or questions, please contact the system administrator.
+## Rate Limiting
+
+- Maximum of 100 requests per minute per IP address
+- Maximum of 1000 requests per hour per device (DUID)
+
+## Notes
+
+1. All timestamps are in ISO 8601 format (UTC)
+2. Channel order is maintained server-side and reflected in the response order
+3. News items are returned in reverse chronological order (newest first)
+4. FTA and Local channels are always accessible, even to expired devices
+5. Premium channels require an active subscription
