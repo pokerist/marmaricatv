@@ -10,7 +10,7 @@ module.exports = {
       }
     },
     {
-      name: 'alkarma-tv-client',
+      name: 'marmarica-tv-client',
       script: 'node_modules/.bin/react-scripts',
       args: 'start',
       cwd: './client',
