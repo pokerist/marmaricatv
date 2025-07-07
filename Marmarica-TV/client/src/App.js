@@ -1,21 +1,18 @@
 import React from 'react';
 import { 
-  BrowserRouter as Router, 
-  Routes, 
   Route, 
   Navigate,
   createRoutesFromElements,
   createBrowserRouter,
   RouterProvider
 } from 'react-router-dom';
-import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
 // Auth
-import { AuthProvider } from './contexts/AuthContext';
 import PrivateRoute from './components/PrivateRoute';
 
 // Layouts
+import RootLayout from './components/layouts/RootLayout';
 import MainLayout from './components/layouts/MainLayout';
 
 // Pages
@@ -32,7 +29,7 @@ import NotFound from './pages/NotFound';
 // Create router with future flags enabled
 const router = createBrowserRouter(
   createRoutesFromElements(
-    <Route>
+    <Route element={<RootLayout />}>
       {/* Public Routes */}
       <Route path="/login" element={<Login />} />
 
@@ -76,12 +73,7 @@ const router = createBrowserRouter(
 );
 
 function App() {
-  return (
-    <AuthProvider>
-      <ToastContainer position="top-right" autoClose={3000} />
-      <RouterProvider router={router} />
-    </AuthProvider>
-  );
+  return <RouterProvider router={router} />;
 }
 
 export default App;

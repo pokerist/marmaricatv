@@ -134,7 +134,32 @@ pm2 status
 pm2 logs marmarica-tv-server
 ```
 
-### 6. Verify Installation
+### 6. Running in Development Mode
+
+1. Start the backend server:
+```bash
+cd server
+npm run dev  # Uses nodemon for auto-reload
+```
+
+2. Start the frontend development server:
+```bash
+cd client
+npm start    # Runs on http://localhost:3000
+```
+
+3. Access the admin panel:
+   - Open http://localhost:3000 in your browser
+   - You should see the login page
+   - Log in with the admin credentials
+
+4. Test client APIs:
+```bash
+# Should return channel list
+curl http://localhost:5000/api/client/channels
+```
+
+### 7. Production Deployment
 
 1. Access the admin panel:
    - Open http://155.138.231.215 in your browser
