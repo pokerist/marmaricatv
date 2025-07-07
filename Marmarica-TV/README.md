@@ -145,18 +145,18 @@ npm run dev  # Uses nodemon for auto-reload
 2. Start the frontend development server:
 ```bash
 cd client
-npm start    # Runs on http://localhost:3000
+npm start    # Runs on http://http://155.138.231.215:3000
 ```
 
 3. Access the admin panel:
-   - Open http://localhost:3000 in your browser
+   - Open http://http://155.138.231.215:3000 in your browser
    - You should see the login page
    - Log in with the admin credentials
 
 4. Test client APIs:
 ```bash
 # Should return channel list
-curl http://localhost:5000/api/client/channels
+curl http://http://155.138.231.215:5000/api/client/channels
 ```
 
 ### 7. Production Deployment

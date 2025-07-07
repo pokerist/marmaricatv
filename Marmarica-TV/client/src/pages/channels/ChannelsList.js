@@ -233,7 +233,7 @@ const ChannelsList = () => {
                       <td>
                         {channel.logo_url ? (
                           <Image 
-                            src={`http://localhost:5000${channel.logo_url}`} 
+                            src={`http://http://155.138.231.215:5000${channel.logo_url}`} 
                             rounded 
                             width="40" 
                             height="40" 
