@@ -306,7 +306,8 @@ const ChannelsList = () => {
               </div>
               <p className="mt-2">Loading channels...</p>
             </div>
-          ) : filteredChannels.length > 0 ? (
+          ) : (
+            filteredChannels.length > 0 ? (
               <div className="table-responsive">
                 {hasActiveFilters && (
                   <div className="alert alert-info mx-3 mb-3">
@@ -406,16 +407,16 @@ const ChannelsList = () => {
                   </tbody>
                 </Table>
               </div>
+            ) : (
+              <div className="text-center py-5">
+                <p className="text-muted">No channels found matching the current filters</p>
+                {(filters.type || filters.category || filters.has_news || searchTerm) && (
+                  <Button variant="link" onClick={clearFilters}>
+                    Clear filters and try again
+                  </Button>
+                )}
+              </div>
             )
-          ) : (
-            <div className="text-center py-5">
-              <p className="text-muted">No channels found matching the current filters</p>
-              {(filters.type || filters.category || filters.has_news || searchTerm) && (
-                <Button variant="link" onClick={clearFilters}>
-                  Clear filters and try again
-                </Button>
-              )}
-            </div>
           )}
         </Card.Body>
       </Card>
