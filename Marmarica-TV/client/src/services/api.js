@@ -186,9 +186,13 @@ export const channelsAPI = {
       return logoPath;
     }
     
-    // If it's a relative path, construct full URL
-    // Remove leading slash if present
-    const path = logoPath.startsWith('/') ? logoPath.substring(1) : logoPath;
+    // Clean up the path:
+    // 1. Remove leading slash if present
+    // 2. Remove 'uploads/' prefix if present (since it's already in UPLOADS_URL)
+    let path = logoPath.startsWith('/') ? logoPath.substring(1) : logoPath;
+    path = path.replace(/^uploads\//, '');
+    
+    // Construct full URL ensuring no double slashes
     return `${UPLOADS_URL}/${path}`;
   }
 };

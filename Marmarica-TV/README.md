@@ -236,6 +236,8 @@ pm2 logs marmarica-tv-server
 # save current pm2 state
 pm2 save --force
 
+# if you need to stop all >>> pm2 delete all
+
 ### 6. Running in Development Mode
 
 1. Ensure environment files are configured correctly:

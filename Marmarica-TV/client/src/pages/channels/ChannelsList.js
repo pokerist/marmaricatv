@@ -32,14 +32,34 @@ const ChannelsList = () => {
   const handleDragEnd = async (result) => {
     if (!result.destination) return;
 
-    const items = Array.from(channels);
-    const [reorderedItem] = items.splice(result.source.index, 1);
-    items.splice(result.destination.index, 0, reorderedItem);
+    try {
+      // Create a copy of the current channels array
+      const items = Array.from(channels);
+      const [reorderedItem] = items.splice(result.source.index, 1);
+      items.splice(result.destination.index, 0, reorderedItem);
 
-    setChannels(items);
+      // Update the state optimistically
+      setChannels(items);
+      setIsSaving(true);
+
+      // Save the new order to the backend
+      const orderedIds = items.map(channel => channel.id);
+      await channelsAPI.reorderChannels(orderedIds);
+      
+      toast.success('Channel order updated successfully');
+    } catch (error) {
+      // Revert to the previous state on error
+      console.error('Error updating channel order:', error);
+      toast.error('Failed to update channel order');
+      
+      // Refresh the channels to ensure correct order
+      fetchChannels();
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  // Save channel order
+  // Save channel order - keeping this as a backup manual save option
   const saveChannelOrder = async () => {
     try {
       setIsSaving(true);
@@ -49,6 +69,8 @@ const ChannelsList = () => {
     } catch (error) {
       console.error('Error saving channel order:', error);
       toast.error('Failed to save channel order');
+      // Refresh the channels to ensure correct order
+      fetchChannels();
     } finally {
       setIsSaving(false);
     }
@@ -358,8 +380,8 @@ const ChannelsList = () => {
                         <tbody>
                           {filteredChannels.map((channel, index) => (
                             <Draggable 
-                              key={`channel-${channel.id}`}
-                              draggableId={`channel-${channel.id}`}
+                              key={String(channel.id)}
+                              draggableId={String(channel.id)}
                               index={index}
                             >
                               {(provided, snapshot) => (
