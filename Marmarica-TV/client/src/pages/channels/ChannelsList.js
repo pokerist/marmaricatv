@@ -24,11 +24,27 @@ const ChannelsList = () => {
   const handleDragEnd = async (result) => {
     if (!result.destination) return;
 
-    const items = Array.from(channels);
-    const [reorderedItem] = items.splice(result.source.index, 1);
-    items.splice(result.destination.index, 0, reorderedItem);
+    const newFilteredChannels = Array.from(filteredChannels);
+    const [reorderedItem] = newFilteredChannels.splice(result.source.index, 1);
+    newFilteredChannels.splice(result.destination.index, 0, reorderedItem);
 
-    setChannels(items);
+    // Update the main channels array while preserving filtered items' positions
+    const newChannels = [...channels];
+    const reorderedIds = newFilteredChannels.map(channel => channel.id);
+    
+    // Reorder only the filtered items in the main array
+    const filteredIndexMap = new Map(
+      filteredChannels.map(channel => [channel.id, channels.indexOf(channel)])
+    );
+    
+    reorderedIds.forEach((id, newIndex) => {
+      const oldIndex = filteredIndexMap.get(id);
+      const [item] = newChannels.splice(oldIndex, 1);
+      const targetIndex = filteredIndexMap.get(reorderedIds[Math.min(newIndex, reorderedIds.length - 1)]);
+      newChannels.splice(targetIndex, 0, item);
+    });
+
+    setChannels(newChannels);
   };
 
   // Save channel order
@@ -286,13 +302,14 @@ const ChannelsList = () => {
                                 {...provided.dragHandleProps}
                                 style={{
                                   ...provided.draggableProps.style,
-                                  background: snapshot.isDragging ? '#f8f9fa' : 'inherit'
+                                  background: snapshot.isDragging ? '#f8f9fa' : 'inherit',
+                                  cursor: snapshot.isDragging ? 'grabbing' : 'grab'
                                 }}
                               >
                                 <td>
                                   {channel.logo_url ? (
                                     <Image 
-                                      src={`http://155.138.231.215:5000${channel.logo_url}`} 
+                                      src={channelsAPI.getLogoUrl(channel.logo_url)} 
                                       rounded 
                                       width="40" 
                                       height="40" 
