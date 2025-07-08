@@ -3,9 +3,8 @@ import {
   Container, Row, Col, Card, Table, Button, Badge, 
   Form, InputGroup, Dropdown, DropdownButton, Image 
 } from 'react-bootstrap';
-import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import { Link } from 'react-router-dom';
-import { FaPlus, FaSearch, FaEdit, FaTrash, FaFilter } from 'react-icons/fa';
+import { FaPlus, FaSearch, FaEdit, FaTrash, FaFilter, FaArrowUp, FaArrowDown } from 'react-icons/fa';
 import { channelsAPI } from '../../services/api';
 import { toast } from 'react-toastify';
 
@@ -28,32 +27,57 @@ const ChannelsList = () => {
     searchTerm
   );
 
-  // Handle drag end
-  const handleDragEnd = async (result) => {
-    if (!result.destination) return;
-
+  // Handle moving channel up
+  const handleMoveUp = async (index) => {
+    if (index === 0) return; // Already at the top
+    
     try {
-      // Create a copy of the current channels array
+      setIsSaving(true);
       const items = Array.from(channels);
-      const [reorderedItem] = items.splice(result.source.index, 1);
-      items.splice(result.destination.index, 0, reorderedItem);
+      const temp = items[index];
+      items[index] = items[index - 1];
+      items[index - 1] = temp;
 
       // Update the state optimistically
       setChannels(items);
-      setIsSaving(true);
 
       // Save the new order to the backend
       const orderedIds = items.map(channel => channel.id);
       await channelsAPI.reorderChannels(orderedIds);
       
-      toast.success('Channel order updated successfully');
+      toast.success('Channel moved up successfully');
     } catch (error) {
-      // Revert to the previous state on error
-      console.error('Error updating channel order:', error);
-      toast.error('Failed to update channel order');
+      console.error('Error moving channel up:', error);
+      toast.error('Failed to move channel');
+      fetchChannels(); // Refresh on error
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Handle moving channel down
+  const handleMoveDown = async (index) => {
+    if (index === channels.length - 1) return; // Already at the bottom
+    
+    try {
+      setIsSaving(true);
+      const items = Array.from(channels);
+      const temp = items[index];
+      items[index] = items[index + 1];
+      items[index + 1] = temp;
+
+      // Update the state optimistically
+      setChannels(items);
+
+      // Save the new order to the backend
+      const orderedIds = items.map(channel => channel.id);
+      await channelsAPI.reorderChannels(orderedIds);
       
-      // Refresh the channels to ensure correct order
-      fetchChannels();
+      toast.success('Channel moved down successfully');
+    } catch (error) {
+      console.error('Error moving channel down:', error);
+      toast.error('Failed to move channel');
+      fetchChannels(); // Refresh on error
     } finally {
       setIsSaving(false);
     }
@@ -283,26 +307,28 @@ const ChannelsList = () => {
               <p className="mt-2">Loading channels...</p>
             </div>
           ) : filteredChannels.length > 0 ? (
-            hasActiveFilters ? (
               <div className="table-responsive">
-                <div className="alert alert-info mx-3 mb-3">
-                  Clear all filters to enable channel reordering
-                </div>
+                {hasActiveFilters && (
+                  <div className="alert alert-info mx-3 mb-3">
+                    Clear all filters to enable channel reordering
+                  </div>
+                )}
                 <Table hover className="custom-table mx-0">
-                        <thead>
-                          <tr>
-                            <th style={{ width: '40px' }}></th>
-                            <th style={{ width: '60px' }}>Logo</th>
-                            <th>Name</th>
-                            <th>Type</th>
-                            <th>Category</th>
-                            <th>Has News</th>
-                            <th style={{width: '120px'}}>Actions</th>
-                          </tr>
-                        </thead>
+                  <thead>
+                    <tr>
+                      <th style={{ width: '40px' }}>#</th>
+                      <th style={{ width: '60px' }}>Logo</th>
+                      <th>Name</th>
+                      <th>Type</th>
+                      <th>Category</th>
+                      <th>Has News</th>
+                      <th style={{width: '200px'}}>Actions</th>
+                    </tr>
+                  </thead>
                   <tbody>
-                    {filteredChannels.map((channel) => (
+                    {filteredChannels.map((channel, index) => (
                       <tr key={channel.id}>
+                        <td className="text-center">{index + 1}</td>
                         <td>
                           {channel.logo_url ? (
                             <Image 
@@ -337,10 +363,32 @@ const ChannelsList = () => {
                           )}
                         </td>
                         <td>
-                          <div className="d-flex">
+                          <div className="d-flex gap-2">
+                            {!hasActiveFilters && (
+                              <>
+                                <Button
+                                  variant="outline-secondary"
+                                  size="sm"
+                                  onClick={() => handleMoveUp(index)}
+                                  disabled={index === 0 || isSaving}
+                                  title="Move Up"
+                                >
+                                  <FaArrowUp />
+                                </Button>
+                                <Button
+                                  variant="outline-secondary"
+                                  size="sm"
+                                  onClick={() => handleMoveDown(index)}
+                                  disabled={index === filteredChannels.length - 1 || isSaving}
+                                  title="Move Down"
+                                >
+                                  <FaArrowDown />
+                                </Button>
+                              </>
+                            )}
                             <Link 
                               to={`/channels/edit/${channel.id}`}
-                              className="btn btn-sm btn-outline-primary me-2"
+                              className="btn btn-sm btn-outline-primary"
                             >
                               <FaEdit /> Edit
                             </Link>
@@ -358,115 +406,6 @@ const ChannelsList = () => {
                   </tbody>
                 </Table>
               </div>
-            ) : (
-              <DragDropContext onDragEnd={handleDragEnd}>
-                <Droppable droppableId="channels">
-                  {(provided) => (
-                    <div 
-                      className="table-responsive"
-                      ref={provided.innerRef}
-                      {...provided.droppableProps}
-                    >
-                      <Table hover className="custom-table mx-0">
-                        <thead>
-                          <tr>
-                            <th style={{ width: '40px' }}></th>
-                            <th style={{ width: '60px' }}>Logo</th>
-                            <th>Name</th>
-                            <th>Type</th>
-                            <th>Category</th>
-                            <th>Has News</th>
-                            <th style={{width: '120px'}}>Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {filteredChannels.map((channel, index) => (
-                            <Draggable 
-                              key={String(channel.id)}
-                              draggableId={String(channel.id)}
-                              index={index}
-                            >
-                              {(provided, snapshot) => (
-                                <tr
-                                  ref={provided.innerRef}
-                                  style={{
-                                    background: snapshot.isDragging ? '#f8f9fa' : 'inherit'
-                                  }}
-                                >
-                                  <td
-                                    {...provided.draggableProps}
-                                    {...provided.dragHandleProps}
-                                    style={{
-                                      ...provided.draggableProps.style,
-                                      cursor: snapshot.isDragging ? 'grabbing' : 'grab',
-                                      width: '40px',
-                                      textAlign: 'center',
-                                      verticalAlign: 'middle'
-                                    }}
-                                  >
-                                    <span style={{ fontSize: '18px', color: '#6c757d' }}>☰</span>
-                                  </td>
-                                  <td>
-                                    {channel.logo_url ? (
-                                      <Image 
-                                        src={channelsAPI.getLogoUrl(channel.logo_url)} 
-                                        rounded 
-                                        width="40" 
-                                        height="40" 
-                                        className="object-fit-cover"
-                                      />
-                                    ) : (
-                                      <div 
-                                        className="bg-secondary text-white rounded d-flex align-items-center justify-content-center"
-                                        style={{ width: '40px', height: '40px' }}
-                                      >
-                                        <small>No Logo</small>
-                                      </div>
-                                    )}
-                                  </td>
-                                  <td>
-                                    {channel.name}
-                                    <div className="text-muted small text-truncate" style={{ maxWidth: '200px' }}>
-                                      {channel.url}
-                                    </div>
-                                  </td>
-                                  <td>{renderTypeBadge(channel.type)}</td>
-                                  <td>{channel.category}</td>
-                                  <td>
-                                    {channel.has_news ? (
-                                      <Badge bg="success">Yes</Badge>
-                                    ) : (
-                                      <Badge bg="secondary">No</Badge>
-                                    )}
-                                  </td>
-                                  <td>
-                                    <div className="d-flex">
-                                      <Link 
-                                        to={`/channels/edit/${channel.id}`}
-                                        className="btn btn-sm btn-outline-primary me-2"
-                                      >
-                                        <FaEdit /> Edit
-                                      </Link>
-                                      <Button
-                                        variant="outline-danger"
-                                        size="sm"
-                                        onClick={() => handleDeleteChannel(channel.id, channel.name)}
-                                      >
-                                        <FaTrash /> Delete
-                                      </Button>
-                                    </div>
-                                  </td>
-                                </tr>
-                              )}
-                            </Draggable>
-                          ))}
-                          {provided.placeholder}
-                        </tbody>
-                      </Table>
-                    </div>
-                  )}
-                </Droppable>
-              </DragDropContext>
             )
           ) : (
             <div className="text-center py-5">

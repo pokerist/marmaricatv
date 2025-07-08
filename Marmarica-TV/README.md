@@ -164,7 +164,7 @@ The database must be initialized before creating admin users:
 
 ```bash
 # Start the server temporarily to create database tables
-cd server
+cd ../server
 node index.js
 
 # Wait for the message "Database tables initialized"
