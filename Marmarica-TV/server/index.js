@@ -13,13 +13,15 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const UPLOAD_DIR = process.env.UPLOAD_DIR || 'uploads';
+const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://155.138.231.215:3000';
+const API_URL = process.env.API_URL || `http://155.138.231.215:${PORT}`;
 
 // Middleware
 app.use(cors({
-  origin: process.env.NODE_ENV === 'production' 
-    ? 'http://155.138.231.215'
-    : 'http://155.138.231.215:3000',
-  credentials: true
+  origin: CORS_ORIGIN,
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(cookieParser());
 app.use(bodyParser.json());
@@ -240,7 +242,8 @@ function checkExpiredDevices() {
 // Start server
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
-  console.log(`API available at http://155.138.231.215:${PORT}/api`);
+  console.log(`API available at ${API_URL}/api`);
+  console.log(`CORS enabled for origin: ${CORS_ORIGIN}`);
   
   // Check for expired devices on startup
   checkExpiredDevices();

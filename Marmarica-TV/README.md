@@ -41,12 +41,18 @@ cd ../client && npm install
 
 ### 2. Environment Configuration
 
+#### Development Environment
+
 1. Create server/.env file:
 ```env
-# Required
-NODE_ENV=production
+# Server Configuration
+NODE_ENV=development
 PORT=5000
 SESSION_SECRET=your-secure-random-string  # Change this!
+
+# CORS Configuration
+CORS_ORIGIN=http://155.138.231.215:3000
+API_URL=http://155.138.231.215:5000
 
 # Optional
 UPLOAD_DIR=uploads  # Default: uploads
@@ -54,7 +60,41 @@ UPLOAD_DIR=uploads  # Default: uploads
 
 2. Create client/.env file:
 ```env
+# API Configuration
+REACT_APP_API_URL=http://155.138.231.215:5000/api
+REACT_APP_API_TIMEOUT=8000
+REACT_APP_API_RETRIES=2
+
+# Upload URL
+REACT_APP_UPLOADS_URL=http://155.138.231.215:5000/uploads
+```
+
+#### Production Environment
+
+1. Update server/.env:
+```env
+# Server Configuration
+NODE_ENV=production
+PORT=5000
+SESSION_SECRET=your-secure-random-string  # Change this!
+
+# CORS Configuration
+CORS_ORIGIN=http://155.138.231.215
+API_URL=http://155.138.231.215
+
+# Optional
+UPLOAD_DIR=uploads
+```
+
+2. Update client/.env:
+```env
+# API Configuration
 REACT_APP_API_URL=http://155.138.231.215/api
+REACT_APP_API_TIMEOUT=8000
+REACT_APP_API_RETRIES=2
+
+# Upload URL
+REACT_APP_UPLOADS_URL=http://155.138.231.215/uploads
 ```
 
 ### 3. Database Initialization
@@ -86,7 +126,7 @@ cd server
 node scripts/manage-admin.js create admin
 
 # OR set a specific password
-node scripts/manage-admin.js set-password admin your-password
+node scripts/manage-admin.js set-password admin Smart@2025#
 ```
 
 The credentials will be saved in `server/admin-credentials.txt`
@@ -133,31 +173,49 @@ pm2 status
 # Check logs for errors
 pm2 logs marmarica-tv-server
 ```
+# save current pm2 state
+pm2 save --force
 
 ### 6. Running in Development Mode
 
-1. Start the backend server:
+1. Ensure environment files are configured correctly:
+   - server/.env should have NODE_ENV=development
+   - CORS_ORIGIN should match your frontend URL
+   - API_URL should include the port number
+
+2. Start the backend server:
 ```bash
 cd server
 npm run dev  # Uses nodemon for auto-reload
 ```
 
-2. Start the frontend development server:
+3. Verify the server output:
+   - Should see "Server running on port 5000"
+   - Should see "CORS enabled for origin: http://155.138.231.215:3000"
+   - Should see database initialization messages
+
+4. Start the frontend development server:
 ```bash
 cd client
 npm start    # Runs on http://155.138.231.215:3000
 ```
 
-3. Access the admin panel:
+5. Access the admin panel:
    - Open http://155.138.231.215:3000 in your browser
    - You should see the login page
+   - Check browser console for API configuration message
    - Log in with the admin credentials
 
-4. Test client APIs:
+6. Test client APIs:
 ```bash
 # Should return channel list
 curl http://155.138.231.215:5000/api/client/channels
 ```
+
+7. Troubleshooting:
+   - If you see CORS errors, verify CORS_ORIGIN matches your frontend URL exactly
+   - If API calls fail, check that API_URL in server/.env matches REACT_APP_API_URL in client/.env
+   - Make sure both servers are running (backend on :5000, frontend on :3000)
 
 ### 7. Production Deployment
 
