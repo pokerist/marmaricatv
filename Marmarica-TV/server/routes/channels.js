@@ -116,7 +116,7 @@ router.get('/', asyncHandler(async (req, res) => {
     sql += ' WHERE ' + conditions.join(' AND ');
   }
   
-  sql += ' ORDER BY name ASC';
+  sql += ' ORDER BY order_index ASC';
   
   // Add a query timeout
   const queryTimeout = setTimeout(() => {
@@ -385,6 +385,62 @@ router.put('/:id', asyncHandler(async (req, res) => {
       });
     });
   });
+}));
+
+// Reorder channels
+router.post('/reorder', asyncHandler(async (req, res) => {
+  const { orderedIds } = req.body;
+  
+  if (!Array.isArray(orderedIds)) {
+    res.status(400).json({ error: 'orderedIds must be an array of channel IDs' });
+    return;
+  }
+
+  // Start a transaction
+  await new Promise((resolve, reject) => {
+    db.run('BEGIN TRANSACTION', (err) => {
+      if (err) reject(err);
+      else resolve();
+    });
+  });
+
+  try {
+    // Update order_index for each channel
+    for (let i = 0; i < orderedIds.length; i++) {
+      await new Promise((resolve, reject) => {
+        db.run(
+          'UPDATE channels SET order_index = ? WHERE id = ?',
+          [i + 1, orderedIds[i]],
+          (err) => {
+            if (err) reject(err);
+            else resolve();
+          }
+        );
+      });
+    }
+
+    // Commit transaction
+    await new Promise((resolve, reject) => {
+      db.run('COMMIT', (err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+
+    // Log action
+    logAction('channels_reordered', `Channel order updated`);
+
+    res.json({ 
+      message: 'Channel order updated successfully',
+      data: orderedIds 
+    });
+  } catch (error) {
+    // Rollback on error
+    await new Promise((resolve) => {
+      db.run('ROLLBACK', () => resolve());
+    });
+    throw error;
+  }
 }));
 
 // Delete channel

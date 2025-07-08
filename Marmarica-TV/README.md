@@ -9,6 +9,67 @@ Admin panel for managing IPTV devices, channels, and news for AlKarma TV.
 - Git for version control
 - Ubuntu server for deployment
 
+## Channel Sorting Feature
+
+The admin panel now includes drag-and-drop channel sorting functionality that preserves device-specific channel permissions.
+
+### Features
+
+- Drag-and-drop interface for reordering channels
+- Persistent channel order across all device types
+- Device-specific channel filtering remains unchanged
+- Real-time order updates with visual feedback
+- Order preserved across admin and client APIs
+
+### Database Migration
+
+Before using the channel sorting feature, run the database migration:
+
+```bash
+# From the server directory
+node scripts/add-channel-order.js
+
+# Verify the migration
+sqlite3 database.sqlite "SELECT name, order_index FROM channels ORDER BY order_index ASC;"
+```
+
+The migration will:
+1. Add an order_index column to the channels table
+2. Initialize order based on current name-based sorting
+3. Create an index for better performance
+
+### Using Channel Sorting
+
+1. Access the Channels Management page
+2. Drag channels to desired positions using the grab handle
+3. Click "Save Order" to persist the changes
+4. The new order will be reflected in all channel lists, including device APIs
+
+### API Changes
+
+New endpoint added:
+```
+POST /api/admin/channels/reorder
+Body: { orderedIds: number[] }
+Response: { message: string, data: number[] }
+```
+
+Modified endpoints (now return channels ordered by order_index):
+- GET /api/channels
+- GET /api/client/check-device (channels in response)
+
+### Modified Files
+
+Backend:
+- server/routes/channels.js (added reorder endpoint)
+- server/routes/client.js (updated ordering)
+- server/scripts/add-channel-order.js (new migration script)
+
+Frontend:
+- client/package.json (added react-beautiful-dnd)
+- client/src/pages/channels/ChannelsList.js (added drag-drop UI)
+- client/src/services/api.js (added reorderChannels method)
+
 ## Authentication System Overview
 
 The admin panel includes secure authentication to protect administrative routes while keeping client device APIs open.
@@ -120,7 +181,6 @@ ls -l database.sqlite  # Should show the database file
 IMPORTANT: Only run these commands after the database has been initialized in step 3.
 
 ```bash
-cd server
 
 # Create admin with random password
 node scripts/manage-admin.js create admin

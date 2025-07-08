@@ -39,7 +39,7 @@ function getChannelsByTypes(types) {
     const placeholders = typeArray.map(() => '?').join(',');
     
     db.all(
-      `SELECT * FROM channels WHERE type IN (${placeholders}) ORDER BY name ASC`,
+      `SELECT * FROM channels WHERE type IN (${placeholders}) ORDER BY order_index ASC`,
       typeArray,
       (err, rows) => {
         if (err) reject(err);

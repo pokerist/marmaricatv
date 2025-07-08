@@ -3,6 +3,7 @@ import {
   Container, Row, Col, Card, Table, Button, Badge, 
   Form, InputGroup, Dropdown, DropdownButton, Image 
 } from 'react-bootstrap';
+import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import { Link } from 'react-router-dom';
 import { FaPlus, FaSearch, FaEdit, FaTrash, FaFilter } from 'react-icons/fa';
 import { channelsAPI } from '../../services/api';
@@ -17,6 +18,33 @@ const ChannelsList = () => {
     has_news: ''
   });
   const [searchTerm, setSearchTerm] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Handle drag end
+  const handleDragEnd = async (result) => {
+    if (!result.destination) return;
+
+    const items = Array.from(channels);
+    const [reorderedItem] = items.splice(result.source.index, 1);
+    items.splice(result.destination.index, 0, reorderedItem);
+
+    setChannels(items);
+  };
+
+  // Save channel order
+  const saveChannelOrder = async () => {
+    try {
+      setIsSaving(true);
+      const orderedIds = channels.map(channel => channel.id);
+      await channelsAPI.reorderChannels(orderedIds);
+      toast.success('Channel order saved successfully');
+    } catch (error) {
+      console.error('Error saving channel order:', error);
+      toast.error('Failed to save channel order');
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   // Categories list
   const categories = [
@@ -129,11 +157,21 @@ const ChannelsList = () => {
 
   return (
     <Container fluid>
-      <div className="d-flex justify-content-between align-items-center">
+      <div className="d-flex justify-content-between align-items-center mb-3">
         <h1 className="page-title">Channels Management</h1>
-        <Link to="/channels/new" className="btn btn-primary">
-          <FaPlus className="me-2" /> Add New Channel
-        </Link>
+        <div>
+          <Button 
+            variant="success" 
+            className="me-2" 
+            onClick={saveChannelOrder}
+            disabled={isSaving}
+          >
+            {isSaving ? 'Saving...' : 'Save Order'}
+          </Button>
+          <Link to="/channels/new" className="btn btn-primary">
+            <FaPlus className="me-2" /> Add New Channel
+          </Link>
+        </div>
       </div>
       
       {/* Filters and Search */}
@@ -215,76 +253,103 @@ const ChannelsList = () => {
               <p className="mt-2">Loading channels...</p>
             </div>
           ) : filteredChannels.length > 0 ? (
-            <div className="table-responsive">
-              <Table hover className="custom-table mx-0">
-                <thead>
-                  <tr>
-                    <th style={{ width: '60px' }}>Logo</th>
-                    <th>Name</th>
-                    <th>Type</th>
-                    <th>Category</th>
-                    <th>Has News</th>
-                    <th style={{width: '120px'}}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredChannels.map((channel) => (
-                    <tr key={channel.id}>
-                      <td>
-                        {channel.logo_url ? (
-                          <Image 
-                            src={`http://155.138.231.215:5000${channel.logo_url}`} 
-                            rounded 
-                            width="40" 
-                            height="40" 
-                            className="object-fit-cover"
-                          />
-                        ) : (
-                          <div 
-                            className="bg-secondary text-white rounded d-flex align-items-center justify-content-center"
-                            style={{ width: '40px', height: '40px' }}
+            <DragDropContext onDragEnd={handleDragEnd}>
+              <Droppable droppableId="channels">
+                {(provided) => (
+                  <div 
+                    className="table-responsive"
+                    ref={provided.innerRef}
+                    {...provided.droppableProps}
+                  >
+                    <Table hover className="custom-table mx-0">
+                      <thead>
+                        <tr>
+                          <th style={{ width: '60px' }}>Logo</th>
+                          <th>Name</th>
+                          <th>Type</th>
+                          <th>Category</th>
+                          <th>Has News</th>
+                          <th style={{width: '120px'}}>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredChannels.map((channel, index) => (
+                          <Draggable 
+                            key={channel.id} 
+                            draggableId={channel.id.toString()} 
+                            index={index}
                           >
-                            <small>No Logo</small>
-                          </div>
-                        )}
-                      </td>
-                      <td>
-                        {channel.name}
-                        <div className="text-muted small text-truncate" style={{ maxWidth: '200px' }}>
-                          {channel.url}
-                        </div>
-                      </td>
-                      <td>{renderTypeBadge(channel.type)}</td>
-                      <td>{channel.category}</td>
-                      <td>
-                        {channel.has_news ? (
-                          <Badge bg="success">Yes</Badge>
-                        ) : (
-                          <Badge bg="secondary">No</Badge>
-                        )}
-                      </td>
-                      <td>
-                        <div className="d-flex">
-                          <Link 
-                            to={`/channels/edit/${channel.id}`}
-                            className="btn btn-sm btn-outline-primary me-2"
-                          >
-                            <FaEdit /> Edit
-                          </Link>
-                          <Button
-                            variant="outline-danger"
-                            size="sm"
-                            onClick={() => handleDeleteChannel(channel.id, channel.name)}
-                          >
-                            <FaTrash /> Delete
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </Table>
-            </div>
+                            {(provided, snapshot) => (
+                              <tr
+                                ref={provided.innerRef}
+                                {...provided.draggableProps}
+                                {...provided.dragHandleProps}
+                                style={{
+                                  ...provided.draggableProps.style,
+                                  background: snapshot.isDragging ? '#f8f9fa' : 'inherit'
+                                }}
+                              >
+                                <td>
+                                  {channel.logo_url ? (
+                                    <Image 
+                                      src={`http://155.138.231.215:5000${channel.logo_url}`} 
+                                      rounded 
+                                      width="40" 
+                                      height="40" 
+                                      className="object-fit-cover"
+                                    />
+                                  ) : (
+                                    <div 
+                                      className="bg-secondary text-white rounded d-flex align-items-center justify-content-center"
+                                      style={{ width: '40px', height: '40px' }}
+                                    >
+                                      <small>No Logo</small>
+                                    </div>
+                                  )}
+                                </td>
+                                <td>
+                                  {channel.name}
+                                  <div className="text-muted small text-truncate" style={{ maxWidth: '200px' }}>
+                                    {channel.url}
+                                  </div>
+                                </td>
+                                <td>{renderTypeBadge(channel.type)}</td>
+                                <td>{channel.category}</td>
+                                <td>
+                                  {channel.has_news ? (
+                                    <Badge bg="success">Yes</Badge>
+                                  ) : (
+                                    <Badge bg="secondary">No</Badge>
+                                  )}
+                                </td>
+                                <td>
+                                  <div className="d-flex">
+                                    <Link 
+                                      to={`/channels/edit/${channel.id}`}
+                                      className="btn btn-sm btn-outline-primary me-2"
+                                    >
+                                      <FaEdit /> Edit
+                                    </Link>
+                                    <Button
+                                      variant="outline-danger"
+                                      size="sm"
+                                      onClick={() => handleDeleteChannel(channel.id, channel.name)}
+                                    >
+                                      <FaTrash /> Delete
+                                    </Button>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </Draggable>
+                        ))}
+                        {provided.placeholder}
+                      </tbody>
+                    </Table>
+                  </div>
+                )}
+              </Droppable>
+            </DragDropContext>
           ) : (
             <div className="text-center py-5">
               <p className="text-muted">No channels found matching the current filters</p>

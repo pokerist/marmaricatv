@@ -163,6 +163,7 @@ export const channelsAPI = {
   createChannel: (channelData) => retryRequest(() => api.post('/channels', channelData)),
   updateChannel: (id, channelData) => retryRequest(() => api.put(`/channels/${id}`, channelData)),
   deleteChannel: (id) => retryRequest(() => api.delete(`/channels/${id}`)),
+  reorderChannels: (orderedIds) => retryRequest(() => api.post('/channels/reorder', { orderedIds })),
   uploadLogo: (id, logoFile) => {
     const formData = new FormData();
     formData.append('logo', logoFile);
