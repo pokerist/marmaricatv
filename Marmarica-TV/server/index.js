@@ -18,7 +18,7 @@ const UPLOAD_DIR = process.env.UPLOAD_DIR || 'uploads';
 app.use(cors({
   origin: process.env.NODE_ENV === 'production' 
     ? 'http://155.138.231.215'
-    : 'http://http://155.138.231.215:3000',
+    : 'http://155.138.231.215:3000',
   credentials: true
 }));
 app.use(cookieParser());
@@ -240,7 +240,7 @@ function checkExpiredDevices() {
 // Start server
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
-  console.log(`API available at http://http://155.138.231.215:${PORT}/api`);
+  console.log(`API available at http://155.138.231.215:${PORT}/api`);
   
   // Check for expired devices on startup
   checkExpiredDevices();

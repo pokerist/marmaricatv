@@ -17,7 +17,7 @@ This document provides comprehensive documentation for all API endpoints availab
 All API endpoints are relative to the base URL:
 
 ```
-http://http://155.138.231.215:5000/api
+http://155.138.231.215:5000/api
 ```
 
 For production environments, replace with your server's domain.
@@ -28,7 +28,7 @@ For production environments, replace with your server's domain.
 2. **Set up Environment Variables**:
    - Create a new environment named "AlKarma TV Development"
    - Add the following variables:
-     - `base_url`: `http://http://155.138.231.215:5000/api`
+     - `base_url`: `http://155.138.231.215:5000/api`
 
 3. **Import this documentation** or create requests as described below
 

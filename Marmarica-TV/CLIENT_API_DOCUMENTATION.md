@@ -23,7 +23,7 @@ http://your-server-address:5000/api/client
 In development environments, this will typically be:
 
 ```
-http://http://155.138.231.215:5000/api/client
+http://155.138.231.215:5000/api/client
 ```
 
 ## Authentication
