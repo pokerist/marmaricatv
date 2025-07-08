@@ -40,6 +40,9 @@ const Login = () => {
         <Col md={6} lg={4}>
           <Card>
             <Card.Body>
+              <div className="text-center mb-4">
+                <img src="/logo.png" alt="Logo" style={{ maxWidth: '200px', height: 'auto' }} />
+              </div>
               <h2 className="text-center mb-4">Admin Login</h2>
               {error && <Alert variant="danger">{error}</Alert>}
               <Form onSubmit={handleSubmit}>
