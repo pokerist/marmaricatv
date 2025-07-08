@@ -217,7 +217,7 @@ module.exports = {
 2. Build and start:
 ```bash
 # Build frontend
-cd client
+cd ../client
 npm run build
 
 # Start server with PM2
@@ -280,7 +280,7 @@ curl http://155.138.231.215:5000/api/client/channels
 ### 7. Production Deployment
 
 1. Access the admin panel:
-   - Open http://155.138.231.215 in your browser
+   - Open http://155.138.231.215:3000 in your browser
    - You should see the login page
    - Log in with the admin credentials
 
