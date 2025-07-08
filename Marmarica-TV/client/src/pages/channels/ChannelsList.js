@@ -289,16 +289,17 @@ const ChannelsList = () => {
                   Clear all filters to enable channel reordering
                 </div>
                 <Table hover className="custom-table mx-0">
-                  <thead>
-                    <tr>
-                      <th style={{ width: '60px' }}>Logo</th>
-                      <th>Name</th>
-                      <th>Type</th>
-                      <th>Category</th>
-                      <th>Has News</th>
-                      <th style={{width: '120px'}}>Actions</th>
-                    </tr>
-                  </thead>
+                        <thead>
+                          <tr>
+                            <th style={{ width: '40px' }}></th>
+                            <th style={{ width: '60px' }}>Logo</th>
+                            <th>Name</th>
+                            <th>Type</th>
+                            <th>Category</th>
+                            <th>Has News</th>
+                            <th style={{width: '120px'}}>Actions</th>
+                          </tr>
+                        </thead>
                   <tbody>
                     {filteredChannels.map((channel) => (
                       <tr key={channel.id}>
@@ -369,6 +370,7 @@ const ChannelsList = () => {
                       <Table hover className="custom-table mx-0">
                         <thead>
                           <tr>
+                            <th style={{ width: '40px' }}></th>
                             <th style={{ width: '60px' }}>Logo</th>
                             <th>Name</th>
                             <th>Type</th>
@@ -387,14 +389,23 @@ const ChannelsList = () => {
                               {(provided, snapshot) => (
                                 <tr
                                   ref={provided.innerRef}
-                                  {...provided.draggableProps}
-                                  {...provided.dragHandleProps}
                                   style={{
-                                    ...provided.draggableProps.style,
-                                    background: snapshot.isDragging ? '#f8f9fa' : 'inherit',
-                                    cursor: snapshot.isDragging ? 'grabbing' : 'grab'
+                                    background: snapshot.isDragging ? '#f8f9fa' : 'inherit'
                                   }}
                                 >
+                                  <td
+                                    {...provided.draggableProps}
+                                    {...provided.dragHandleProps}
+                                    style={{
+                                      ...provided.draggableProps.style,
+                                      cursor: snapshot.isDragging ? 'grabbing' : 'grab',
+                                      width: '40px',
+                                      textAlign: 'center',
+                                      verticalAlign: 'middle'
+                                    }}
+                                  >
+                                    <span style={{ fontSize: '18px', color: '#6c757d' }}>☰</span>
+                                  </td>
                                   <td>
                                     {channel.logo_url ? (
                                       <Image 
