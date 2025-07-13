@@ -4,8 +4,8 @@ import {
   Form, InputGroup, Dropdown, DropdownButton, Image 
 } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
-import { FaPlus, FaSearch, FaEdit, FaTrash, FaFilter, FaArrowUp, FaArrowDown } from 'react-icons/fa';
-import { channelsAPI } from '../../services/api';
+import { FaPlus, FaSearch, FaEdit, FaTrash, FaFilter, FaArrowUp, FaArrowDown, FaPlay, FaStop, FaSync } from 'react-icons/fa';
+import { channelsAPI, transcodingAPI } from '../../services/api';
 import { toast } from 'react-toastify';
 
 const ChannelsList = () => {
@@ -155,6 +155,30 @@ const ChannelsList = () => {
         console.error('Error deleting channel:', error);
         toast.error('Failed to delete channel');
       }
+    }
+  };
+
+  // Handle transcoding toggle
+  const handleToggleTranscoding = async (channelId, enabled) => {
+    try {
+      await transcodingAPI.toggleTranscoding(channelId, enabled);
+      toast.success(`Transcoding ${enabled ? 'enabled' : 'disabled'} successfully`);
+      fetchChannels(); // Refresh to show updated status
+    } catch (error) {
+      console.error('Error toggling transcoding:', error);
+      toast.error('Failed to toggle transcoding');
+    }
+  };
+
+  // Handle transcoding restart
+  const handleRestartTranscoding = async (channelId) => {
+    try {
+      await transcodingAPI.restartTranscoding(channelId);
+      toast.success('Transcoding restarted successfully');
+      fetchChannels(); // Refresh to show updated status
+    } catch (error) {
+      console.error('Error restarting transcoding:', error);
+      toast.error('Failed to restart transcoding');
     }
   };
 
@@ -323,7 +347,8 @@ const ChannelsList = () => {
                       <th>Type</th>
                       <th>Category</th>
                       <th>Has News</th>
-                      <th style={{width: '200px'}}>Actions</th>
+                      <th>Transcoding</th>
+                      <th style={{width: '250px'}}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -362,6 +387,78 @@ const ChannelsList = () => {
                           ) : (
                             <Badge bg="secondary">No</Badge>
                           )}
+                        </td>
+                        <td>
+                          <div className="d-flex flex-column gap-1">
+                            {/* Transcoding Status */}
+                            <div>
+                              {channel.transcoding_enabled ? (
+                                channel.transcoding_status === 'active' ? (
+                                  <Badge bg="success">
+                                    <FaPlay className="me-1" />
+                                    Active
+                                  </Badge>
+                                ) : channel.transcoding_status === 'starting' ? (
+                                  <Badge bg="warning">
+                                    <FaSync className="me-1" />
+                                    Starting
+                                  </Badge>
+                                ) : channel.transcoding_status === 'stopping' ? (
+                                  <Badge bg="warning">
+                                    <FaStop className="me-1" />
+                                    Stopping
+                                  </Badge>
+                                ) : channel.transcoding_status === 'failed' ? (
+                                  <Badge bg="danger">
+                                    Failed
+                                  </Badge>
+                                ) : (
+                                  <Badge bg="secondary">
+                                    Inactive
+                                  </Badge>
+                                )
+                              ) : (
+                                <Badge bg="secondary">
+                                  Disabled
+                                </Badge>
+                              )}
+                            </div>
+                            
+                            {/* Transcoding Controls */}
+                            {channel.transcoding_enabled && (
+                              <div className="d-flex gap-1">
+                                {channel.transcoding_status === 'active' && (
+                                  <Button
+                                    variant="outline-warning"
+                                    size="sm"
+                                    onClick={() => handleRestartTranscoding(channel.id)}
+                                    title="Restart Transcoding"
+                                  >
+                                    <FaSync />
+                                  </Button>
+                                )}
+                                <Button
+                                  variant="outline-danger"
+                                  size="sm"
+                                  onClick={() => handleToggleTranscoding(channel.id, false)}
+                                  title="Disable Transcoding"
+                                >
+                                  <FaStop />
+                                </Button>
+                              </div>
+                            )}
+                            
+                            {!channel.transcoding_enabled && (
+                              <Button
+                                variant="outline-success"
+                                size="sm"
+                                onClick={() => handleToggleTranscoding(channel.id, true)}
+                                title="Enable Transcoding"
+                              >
+                                <FaPlay />
+                              </Button>
+                            )}
+                          </div>
                         </td>
                         <td>
                           <div className="d-flex gap-2">

@@ -197,6 +197,18 @@ export const channelsAPI = {
   }
 };
 
+// Transcoding API
+export const transcodingAPI = {
+  getActiveJobs: () => retryRequest(() => api.get('/transcoding/jobs')),
+  getTranscodingStatus: (channelId) => retryRequest(() => api.get(`/transcoding/status/${channelId}`)),
+  startTranscoding: (channelId) => retryRequest(() => api.post(`/transcoding/start/${channelId}`)),
+  stopTranscoding: (channelId) => retryRequest(() => api.post(`/transcoding/stop/${channelId}`)),
+  restartTranscoding: (channelId) => retryRequest(() => api.post(`/transcoding/restart/${channelId}`)),
+  toggleTranscoding: (channelId, enabled) => retryRequest(() => api.post(`/transcoding/toggle/${channelId}`, { enabled })),
+  getTranscodingHistory: (channelId, limit = 10) => retryRequest(() => api.get(`/transcoding/history/${channelId}?limit=${limit}`)),
+  getTranscodingStats: () => retryRequest(() => api.get('/transcoding/stats')),
+};
+
 // Auth API
 export const authAPI = {
   login: (credentials) => retryRequest(() => api.post('/auth/login', credentials)),

@@ -42,6 +42,10 @@ app.use(session({
 // Serve uploaded files
 app.use('/uploads', express.static(path.join(__dirname, UPLOAD_DIR)));
 
+// Serve HLS streams
+const HLS_OUTPUT_BASE = process.env.HLS_OUTPUT_BASE || '/var/www/html/hls_stream';
+app.use('/hls_stream', express.static(HLS_OUTPUT_BASE));
+
 // Log server configuration
 console.log(`Server starting in ${NODE_ENV} mode`);
 console.log(`Port: ${PORT}`);
@@ -145,6 +149,7 @@ const newsRoutes = require('./routes/news');
 const dashboardRoutes = require('./routes/dashboard');
 const clientRoutes = require('./routes/client');
 const authRoutes = require('./routes/auth');
+const transcodingRoutes = require('./routes/transcoding');
 
 // Initialize auth table
 const { initializeAuthTable } = require('./controllers/auth');
@@ -159,6 +164,7 @@ app.use('/api/devices', isAuthenticated, deviceRoutes);
 app.use('/api/channels', isAuthenticated, channelRoutes);
 app.use('/api/news', isAuthenticated, newsRoutes);
 app.use('/api/dashboard', isAuthenticated, dashboardRoutes);
+app.use('/api/transcoding', isAuthenticated, transcodingRoutes);
 app.use('/api/client', clientRoutes); // Client routes remain open
 
 // Health check route
@@ -239,8 +245,11 @@ function checkExpiredDevices() {
   }
 }
 
+// Initialize transcoding service
+const transcodingService = require('./services/transcoding');
+
 // Start server
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`API available at ${API_URL}/api`);
   console.log(`CORS enabled for origin: ${CORS_ORIGIN}`);
@@ -250,10 +259,19 @@ app.listen(PORT, () => {
   
   // Set up a periodic check for expired devices (every hour)
   setInterval(checkExpiredDevices, 60 * 60 * 1000);
+  
+  // Initialize transcoding service
+  await transcodingService.initializeTranscoding();
 });
 
 // Handle shutdown gracefully
-process.on('SIGINT', () => {
+process.on('SIGINT', async () => {
+  console.log('Received SIGINT, shutting down gracefully...');
+  
+  // Cleanup transcoding processes
+  await transcodingService.cleanup();
+  
+  // Close database connection
   db.close((err) => {
     if (err) {
       console.error(err.message);

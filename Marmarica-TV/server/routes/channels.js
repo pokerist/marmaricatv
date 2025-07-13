@@ -4,6 +4,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const { db } = require('../index');
+const transcodingService = require('../services/transcoding');
 
 // Helper function to log actions
 const logAction = (actionType, description) => {
@@ -160,7 +161,7 @@ router.get('/:id', asyncHandler(async (req, res) => {
 
 // Create new channel
 router.post('/', asyncHandler(async (req, res) => {
-  const { name, url, type, category, has_news } = req.body;
+  const { name, url, type, category, has_news, transcoding_enabled } = req.body;
   
   // Validation
   if (!name || !url || !type || !category) {
@@ -177,8 +178,8 @@ router.post('/', asyncHandler(async (req, res) => {
     db.run(
       `INSERT INTO channels (
         name, url, logo_url, type, category, 
-        has_news, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        has_news, transcoding_enabled, transcoding_status, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         name, 
         url, 
@@ -186,20 +187,34 @@ router.post('/', asyncHandler(async (req, res) => {
         type, 
         category,
         has_news ? 1 : 0,
+        transcoding_enabled ? 1 : 0,
+        'inactive',
         now, 
         now
       ],
-      function(err) {
+      async function(err) {
         if (err) {
           console.error('Error creating channel:', err.message);
           return reject(err);
         }
         
+        const channelId = this.lastID;
+        
+        // Start transcoding if enabled
+        if (transcoding_enabled) {
+          try {
+            await transcodingService.startTranscoding(channelId, url, name);
+          } catch (error) {
+            console.error('Error starting transcoding for new channel:', error);
+            // Don't fail the channel creation if transcoding fails
+          }
+        }
+        
         // Log action
-        logAction('channel_added', `New channel added: ${name} (${type})`);
+        logAction('channel_added', `New channel added: ${name} (${type})${transcoding_enabled ? ' with transcoding' : ''}`);
         
         // Return created channel
-        db.get('SELECT * FROM channels WHERE id = ?', [this.lastID], (err, row) => {
+        db.get('SELECT * FROM channels WHERE id = ?', [channelId], (err, row) => {
           if (err) {
             console.error('Error retrieving created channel:', err.message);
             return reject(err);
@@ -295,7 +310,7 @@ router.post('/:id/logo', (req, res) => {
 
 // Update channel
 router.put('/:id', asyncHandler(async (req, res) => {
-  const { name, url, type, category, has_news } = req.body;
+  const { name, url, type, category, has_news, transcoding_enabled } = req.body;
   const now = new Date().toISOString();
   
   // Check if channel exists
@@ -343,6 +358,11 @@ router.put('/:id', asyncHandler(async (req, res) => {
     params.push(has_news ? 1 : 0);
   }
   
+  if (transcoding_enabled !== undefined) {
+    updates.push('transcoding_enabled = ?');
+    params.push(transcoding_enabled ? 1 : 0);
+  }
+  
   updates.push('updated_at = ?');
   params.push(now);
   params.push(req.params.id);
@@ -355,7 +375,7 @@ router.put('/:id', asyncHandler(async (req, res) => {
   const sql = `UPDATE channels SET ${updates.join(', ')} WHERE id = ?`;
   
   await new Promise((resolve, reject) => {
-    db.run(sql, params, function(err) {
+    db.run(sql, params, async function(err) {
       if (err) {
         console.error('Error updating channel:', err.message);
         return reject(err);
@@ -364,6 +384,38 @@ router.put('/:id', asyncHandler(async (req, res) => {
       if (this.changes === 0) {
         res.status(404).json({ error: 'Channel not found' });
         return resolve();
+      }
+      
+      // Handle transcoding changes
+      if (transcoding_enabled !== undefined) {
+        const wasTranscodingEnabled = Boolean(channel.transcoding_enabled);
+        const isTranscodingEnabled = Boolean(transcoding_enabled);
+        
+        if (wasTranscodingEnabled && !isTranscodingEnabled) {
+          // Stop transcoding
+          try {
+            await transcodingService.stopTranscoding(channel.id, channel.name);
+          } catch (error) {
+            console.error('Error stopping transcoding:', error);
+          }
+        } else if (!wasTranscodingEnabled && isTranscodingEnabled) {
+          // Start transcoding
+          try {
+            const finalUrl = url !== undefined ? url : channel.url;
+            const finalName = name !== undefined ? name : channel.name;
+            await transcodingService.startTranscoding(channel.id, finalUrl, finalName);
+          } catch (error) {
+            console.error('Error starting transcoding:', error);
+          }
+        } else if (wasTranscodingEnabled && isTranscodingEnabled && url !== undefined) {
+          // Restart transcoding with new URL
+          try {
+            const finalName = name !== undefined ? name : channel.name;
+            await transcodingService.restartTranscoding(channel.id, url, finalName);
+          } catch (error) {
+            console.error('Error restarting transcoding:', error);
+          }
+        }
       }
       
       // Log action
@@ -459,6 +511,16 @@ router.delete('/:id', asyncHandler(async (req, res) => {
   if (!channel) {
     res.status(404).json({ error: 'Channel not found' });
     return;
+  }
+  
+  // Stop transcoding if enabled
+  if (channel.transcoding_enabled) {
+    try {
+      await transcodingService.stopTranscoding(channel.id, channel.name);
+    } catch (error) {
+      console.error('Error stopping transcoding before deletion:', error);
+      // Continue with deletion even if transcoding stop fails
+    }
   }
   
   await new Promise((resolve, reject) => {

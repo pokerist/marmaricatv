@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Container, Card, Row, Col, Form, Button, Alert, Spinner, Image } from 'react-bootstrap';
+import { Container, Card, Row, Col, Form, Button, Alert, Spinner, Image, Badge } from 'react-bootstrap';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { Formik } from 'formik';
 import * as Yup from 'yup';
-import { channelsAPI } from '../../services/api';
+import { channelsAPI, transcodingAPI } from '../../services/api';
 import { toast } from 'react-toastify';
-import { FaUpload } from 'react-icons/fa';
+import { FaUpload, FaPlay, FaStop, FaSync } from 'react-icons/fa';
 
 // Validation schema
 const ChannelSchema = Yup.object().shape({
@@ -19,7 +19,8 @@ const ChannelSchema = Yup.object().shape({
     .required('Channel type is required'),
   category: Yup.string()
     .required('Category is required'),
-  has_news: Yup.boolean()
+  has_news: Yup.boolean(),
+  transcoding_enabled: Yup.boolean()
 });
 
 const ChannelForm = () => {
@@ -165,7 +166,8 @@ const ChannelForm = () => {
         url: channel.url || '',
         type: channel.type || 'FTA',
         category: channel.category || 'General',
-        has_news: channel.has_news ? true : false
+        has_news: channel.has_news ? true : false,
+        transcoding_enabled: channel.transcoding_enabled ? true : false
       };
     }
     
@@ -175,7 +177,8 @@ const ChannelForm = () => {
       url: '',
       type: 'FTA',
       category: 'General',
-      has_news: false
+      has_news: false,
+      transcoding_enabled: false
     };
   };
   
@@ -369,6 +372,90 @@ const ChannelForm = () => {
                         onChange={handleChange}
                       />
                     </Form.Group>
+                  </Col>
+                </Row>
+                
+                {/* Transcoding Section */}
+                <Row>
+                  <Col md={12}>
+                    <Card className="mb-4">
+                      <Card.Header>
+                        <h5 className="mb-0">Transcoding Settings (LL-HLS)</h5>
+                      </Card.Header>
+                      <Card.Body>
+                        <Row>
+                          <Col md={6}>
+                            <Form.Group className="mb-3">
+                              <Form.Check
+                                type="switch"
+                                id="transcoding-enabled-switch"
+                                name="transcoding_enabled"
+                                label="Enable LL-HLS Transcoding"
+                                checked={values.transcoding_enabled}
+                                onChange={handleChange}
+                              />
+                              <Form.Text className="text-muted">
+                                When enabled, the stream will be transcoded to LL-HLS format for better compatibility and performance.
+                              </Form.Text>
+                            </Form.Group>
+                          </Col>
+                          
+                          {/* Transcoding Status */}
+                          {isEditing && channel && (
+                            <Col md={6}>
+                              <div className="mb-3">
+                                <strong>Transcoding Status:</strong>
+                                <div className="mt-2">
+                                  {channel.transcoding_status === 'active' && (
+                                    <Badge bg="success" className="me-2">
+                                      <FaPlay className="me-1" />
+                                      Active
+                                    </Badge>
+                                  )}
+                                  {channel.transcoding_status === 'starting' && (
+                                    <Badge bg="warning" className="me-2">
+                                      <FaSync className="me-1" />
+                                      Starting
+                                    </Badge>
+                                  )}
+                                  {channel.transcoding_status === 'stopping' && (
+                                    <Badge bg="warning" className="me-2">
+                                      <FaStop className="me-1" />
+                                      Stopping
+                                    </Badge>
+                                  )}
+                                  {channel.transcoding_status === 'failed' && (
+                                    <Badge bg="danger" className="me-2">
+                                      Failed
+                                    </Badge>
+                                  )}
+                                  {channel.transcoding_status === 'inactive' && (
+                                    <Badge bg="secondary" className="me-2">
+                                      Inactive
+                                    </Badge>
+                                  )}
+                                </div>
+                                
+                                {channel.transcoded_url && (
+                                  <div className="mt-2">
+                                    <small className="text-muted">
+                                      Transcoded URL: <code>{channel.transcoded_url}</code>
+                                    </small>
+                                  </div>
+                                )}
+                              </div>
+                            </Col>
+                          )}
+                        </Row>
+                        
+                        {values.transcoding_enabled && (
+                          <Alert variant="info" className="mt-3">
+                            <strong>Note:</strong> Transcoding will use server resources. The transcoded stream will be available at 
+                            <code>/hls_stream/channel_[ID]/output.m3u8</code> once processing begins.
+                          </Alert>
+                        )}
+                      </Card.Body>
+                    </Card>
                   </Col>
                 </Row>
                 
