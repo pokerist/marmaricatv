@@ -90,6 +90,17 @@ function asyncHandler(fn) {
   };
 }
 
+// Helper function to process channel URL - return transcoded URL if active
+function processChannelUrl(channel) {
+  if (channel.transcoding_enabled && 
+      channel.transcoding_status === 'active' && 
+      channel.transcoded_url) {
+    // Replace the original URL with the transcoded URL
+    channel.url = channel.transcoded_url;
+  }
+  return channel;
+}
+
 // Get all channels with optional filtering
 router.get('/', asyncHandler(async (req, res) => {
   const { type, category, has_news } = req.query;
@@ -133,7 +144,10 @@ router.get('/', asyncHandler(async (req, res) => {
         return reject(err);
       }
       
-      res.json({ data: rows });
+      // Process each channel to return transcoded URL if active
+      const processedRows = rows.map(channel => processChannelUrl(channel));
+      
+      res.json({ data: processedRows });
       resolve();
     });
   });
@@ -153,7 +167,10 @@ router.get('/:id', asyncHandler(async (req, res) => {
         return resolve();
       }
       
-      res.json({ data: row });
+      // Process channel to return transcoded URL if active
+      const processedChannel = processChannelUrl(row);
+      
+      res.json({ data: processedChannel });
       resolve();
     });
   });

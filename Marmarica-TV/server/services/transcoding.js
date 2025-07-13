@@ -191,7 +191,7 @@ const startTranscoding = async (channelId, inputUrl, channelName) => {
       if (code === 0) {
         // Process completed successfully
         await updateJobStatus(jobId, 'completed');
-        await updateChannelStatus(channelId, 'active', `/hls_stream/channel_${channelId}/output.m3u8`);
+        await updateChannelStatus(channelId, 'active', `http://192.168.100.232/hls_stream/channel_${channelId}/output.m3u8`);
         logAction('transcoding_completed', `Transcoding completed for channel: ${channelName}`);
       } else {
         // Process failed
@@ -216,7 +216,7 @@ const startTranscoding = async (channelId, inputUrl, channelName) => {
     // Give it a moment to start, then update status
     setTimeout(async () => {
       if (activeProcesses.has(channelId)) {
-        await updateChannelStatus(channelId, 'active', `/hls_stream/channel_${channelId}/output.m3u8`);
+        await updateChannelStatus(channelId, 'active', `http://192.168.100.232/hls_stream/channel_${channelId}/output.m3u8`);
         logAction('transcoding_started', `Transcoding started for channel: ${channelName}`);
       }
     }, 2000);

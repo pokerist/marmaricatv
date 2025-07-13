@@ -451,7 +451,7 @@ const ChannelForm = () => {
                         {values.transcoding_enabled && (
                           <Alert variant="info" className="mt-3">
                             <strong>Note:</strong> Transcoding will use server resources. The transcoded stream will be available at 
-                            <code>/hls_stream/channel_[ID]/output.m3u8</code> once processing begins.
+                            <code>[serverip]/hls_stream/channel_[ID]/output.m3u8</code> once processing begins.
                           </Alert>
                         )}
                       </Card.Body>
