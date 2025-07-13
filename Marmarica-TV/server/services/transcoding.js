@@ -41,16 +41,16 @@ const updateChannelStatus = (channelId, status, transcodedUrl = null) => {
     const now = new Date().toISOString();
     let sql = 'UPDATE channels SET transcoding_status = ?, updated_at = ?';
     let params = [status, now];
-    
+
     if (transcodedUrl !== null) {
       sql += ', transcoded_url = ?';
       params.push(transcodedUrl);
     }
-    
+
     sql += ' WHERE id = ?';
     params.push(channelId);
-    
-    db.run(sql, params, function(err) {
+
+    db.run(sql, params, function (err) {
       if (err) {
         console.error('Error updating channel status:', err.message);
         reject(err);
@@ -67,21 +67,21 @@ const updateJobStatus = (jobId, status, errorMessage = null, ffmpegPid = null) =
     const now = new Date().toISOString();
     let sql = 'UPDATE transcoding_jobs SET status = ?, updated_at = ?';
     let params = [status, now];
-    
+
     if (errorMessage !== null) {
       sql += ', error_message = ?';
       params.push(errorMessage);
     }
-    
+
     if (ffmpegPid !== null) {
       sql += ', ffmpeg_pid = ?';
       params.push(ffmpegPid);
     }
-    
+
     sql += ' WHERE id = ?';
     params.push(jobId);
-    
-    db.run(sql, params, function(err) {
+
+    db.run(sql, params, function (err) {
       if (err) {
         console.error('Error updating job status:', err.message);
         reject(err);
@@ -95,12 +95,12 @@ const updateJobStatus = (jobId, status, errorMessage = null, ffmpegPid = null) =
 // Create output directory for a channel
 const createOutputDirectory = (channelId) => {
   const outputDir = path.join(HLS_OUTPUT_BASE, `channel_${channelId}`);
-  
+
   if (!fs.existsSync(outputDir)) {
     fs.mkdirSync(outputDir, { recursive: true });
     console.log(`Created output directory: ${outputDir}`);
   }
-  
+
   return outputDir;
 };
 
@@ -109,29 +109,30 @@ const generateFFmpegCommand = (inputUrl, channelId) => {
   const outputDir = createOutputDirectory(channelId);
   const outputPath = path.join(outputDir, 'output.m3u8');
   const segmentPath = path.join(outputDir, 'output_%03d.m4s');
-  
+
   const command = [
     '-i', inputUrl,
     '-c:v', 'libx264',
     '-preset', 'veryfast',
     '-tune', 'zerolatency',
-    '-g', '12',
-    '-keyint_min', '12',
+    '-g', '50',                     // Keyframe every 2 seconds (for 25 fps input, adjust as needed)
+    '-keyint_min', '50',
     '-sc_threshold', '0',
     '-c:a', 'aac',
     '-b:a', '128k',
     '-f', 'hls',
-    '-hls_time', '0.5',
+    '-hls_time', '4',               // 4 second segments for classic HLS
     '-hls_playlist_type', 'event',
-    '-hls_flags', 'independent_segments+delete_segments+split_by_time+program_date_time',
-    '-hls_segment_type', 'fmp4',
+    '-hls_flags', 'independent_segments+delete_segments+program_date_time',
+    '-hls_segment_type', 'mpegts',  // <-- KEY CHANGE!
     '-hls_segment_filename', segmentPath,
     '-hls_start_number_source', 'epoch',
-    '-hls_list_size', Math.max(HLS_LIST_SIZE, 4).toString(), // Ensure minimum 4 segments
-    '-hls_delete_threshold', '1', // Less aggressive initially
+    '-hls_list_size', Math.max(HLS_LIST_SIZE, 4).toString(),
+    '-hls_delete_threshold', '1',
     outputPath
   ];
-  
+
+
   return { command, outputPath };
 };
 
@@ -142,26 +143,26 @@ const startTranscoding = async (channelId, inputUrl, channelName) => {
     console.log(`Input URL: ${inputUrl}`);
     console.log(`FFmpeg path: ${FFMPEG_PATH}`);
     console.log(`HLS output base: ${HLS_OUTPUT_BASE}`);
-    
+
     // Validate input parameters
     if (!inputUrl || !inputUrl.trim()) {
       throw new Error('Input URL is required');
     }
-    
+
     // Update channel status to starting
     await updateChannelStatus(channelId, 'starting');
-    
+
     // Generate FFmpeg command
     const { command, outputPath } = generateFFmpegCommand(inputUrl, channelId);
     console.log(`FFmpeg command: ${FFMPEG_PATH} ${command.join(' ')}`);
-    
+
     // Create transcoding job record
     const now = new Date().toISOString();
     const jobId = await new Promise((resolve, reject) => {
       db.run(
         'INSERT INTO transcoding_jobs (channel_id, output_path, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
         [channelId, outputPath, 'starting', now, now],
-        function(err) {
+        function (err) {
           if (err) {
             console.error('Error creating transcoding job:', err.message);
             reject(err);
@@ -171,7 +172,7 @@ const startTranscoding = async (channelId, inputUrl, channelName) => {
         }
       );
     });
-    
+
     // Spawn FFmpeg process with detailed error handling
     let ffmpegProcess;
     try {
@@ -182,9 +183,9 @@ const startTranscoding = async (channelId, inputUrl, channelName) => {
       await updateChannelStatus(channelId, 'failed');
       throw spawnError;
     }
-    
+
     const pid = ffmpegProcess.pid;
-    
+
     if (!pid) {
       const error = new Error('FFmpeg process failed to start - no PID');
       console.error(error.message);
@@ -192,25 +193,25 @@ const startTranscoding = async (channelId, inputUrl, channelName) => {
       await updateChannelStatus(channelId, 'failed');
       throw error;
     }
-    
+
     console.log(`Started FFmpeg process with PID: ${pid}`);
-    
+
     // Store process reference
     activeProcesses.set(channelId, {
       process: ffmpegProcess,
       jobId: jobId,
       channelName: channelName
     });
-    
+
     // Update job with PID
     await updateJobStatus(jobId, 'running', null, pid);
-    
+
     // Set up process event handlers
     ffmpegProcess.stdout.on('data', (data) => {
       // Log FFmpeg output if needed (can be verbose)
       // console.log(`FFmpeg stdout: ${data}`);
     });
-    
+
     ffmpegProcess.stderr.on('data', (data) => {
       const output = data.toString();
       // Log significant errors, but not normal FFmpeg info
@@ -218,13 +219,13 @@ const startTranscoding = async (channelId, inputUrl, channelName) => {
         console.error(`FFmpeg stderr: ${output}`);
       }
     });
-    
+
     ffmpegProcess.on('close', async (code) => {
       console.log(`FFmpeg process for channel ${channelId} closed with code ${code}`);
-      
+
       // Remove from active processes
       activeProcesses.delete(channelId);
-      
+
       if (code === 0) {
         // Process completed successfully
         await updateJobStatus(jobId, 'completed');
@@ -237,19 +238,19 @@ const startTranscoding = async (channelId, inputUrl, channelName) => {
         logAction('transcoding_failed', `Transcoding failed for channel: ${channelName} (exit code: ${code})`);
       }
     });
-    
+
     ffmpegProcess.on('error', async (err) => {
       console.error(`FFmpeg process error for channel ${channelId}:`, err);
-      
+
       // Remove from active processes
       activeProcesses.delete(channelId);
-      
+
       // Update job and channel status
       await updateJobStatus(jobId, 'failed', err.message);
       await updateChannelStatus(channelId, 'failed');
       logAction('transcoding_error', `Transcoding error for channel: ${channelName} - ${err.message}`);
     });
-    
+
     // Give it a moment to start, then update status
     setTimeout(async () => {
       if (activeProcesses.has(channelId)) {
@@ -257,9 +258,9 @@ const startTranscoding = async (channelId, inputUrl, channelName) => {
         logAction('transcoding_started', `Transcoding started for channel: ${channelName}`);
       }
     }, 2000);
-    
+
     return { success: true, jobId, pid };
-    
+
   } catch (error) {
     console.error(`Error starting transcoding for channel ${channelId}:`, error);
     await updateChannelStatus(channelId, 'failed');
@@ -271,38 +272,38 @@ const startTranscoding = async (channelId, inputUrl, channelName) => {
 const stopTranscoding = async (channelId, channelName) => {
   try {
     console.log(`Stopping transcoding for channel ${channelId}: ${channelName}`);
-    
+
     // Update channel status
     await updateChannelStatus(channelId, 'stopping');
-    
+
     // Kill FFmpeg process if it's running
     if (activeProcesses.has(channelId)) {
       const { process, jobId } = activeProcesses.get(channelId);
-      
+
       // Kill the process
       process.kill('SIGTERM');
-      
+
       // Remove from active processes
       activeProcesses.delete(channelId);
-      
+
       // Update job status
       await updateJobStatus(jobId, 'stopped');
     }
-    
+
     // Clean up output directory
     const outputDir = path.join(HLS_OUTPUT_BASE, `channel_${channelId}`);
     if (fs.existsSync(outputDir)) {
       fs.rmSync(outputDir, { recursive: true, force: true });
       console.log(`Cleaned up output directory: ${outputDir}`);
     }
-    
+
     // Update channel status
     await updateChannelStatus(channelId, 'inactive', null);
-    
+
     logAction('transcoding_stopped', `Transcoding stopped for channel: ${channelName}`);
-    
+
     return { success: true };
-    
+
   } catch (error) {
     console.error(`Error stopping transcoding for channel ${channelId}:`, error);
     throw error;
@@ -313,16 +314,16 @@ const stopTranscoding = async (channelId, channelName) => {
 const restartTranscoding = async (channelId, inputUrl, channelName) => {
   try {
     console.log(`Restarting transcoding for channel ${channelId}: ${channelName}`);
-    
+
     // First stop any existing transcoding
     await stopTranscoding(channelId, channelName);
-    
+
     // Wait a moment for cleanup
     await new Promise(resolve => setTimeout(resolve, 1000));
-    
+
     // Start transcoding again
     return await startTranscoding(channelId, inputUrl, channelName);
-    
+
   } catch (error) {
     console.error(`Error restarting transcoding for channel ${channelId}:`, error);
     throw error;
@@ -355,7 +356,7 @@ const getDirectorySize = (dirPath) => {
   let totalSize = 0;
   try {
     if (!fs.existsSync(dirPath)) return 0;
-    
+
     const files = fs.readdirSync(dirPath);
     for (const file of files) {
       const filePath = path.join(dirPath, file);
@@ -383,20 +384,20 @@ const getFileAge = (filePath) => {
 // Aggressive segment cleanup for a specific channel
 const cleanupChannelSegments = async (channelId) => {
   const channelDir = path.join(HLS_OUTPUT_BASE, `channel_${channelId}`);
-  
+
   if (!fs.existsSync(channelDir)) {
     return { cleaned: 0, size_freed: 0 };
   }
-  
+
   let cleanedFiles = 0;
   let sizeFreed = 0;
-  
+
   try {
     const files = fs.readdirSync(channelDir);
-    const segmentFiles = files.filter(file => 
+    const segmentFiles = files.filter(file =>
       file.endsWith('.m4s') || file.endsWith('.ts')
     );
-    
+
     // Sort by modification time (oldest first)
     const fileStats = segmentFiles.map(file => {
       const filePath = path.join(channelDir, file);
@@ -407,31 +408,31 @@ const cleanupChannelSegments = async (channelId) => {
         size: fs.statSync(filePath).size
       };
     }).sort((a, b) => b.age - a.age);
-    
+
     // Keep only the newest segments according to HLS_LIST_SIZE + buffer
     const keepCount = HLS_LIST_SIZE + 2; // Keep a couple extra for safety
     const filesToDelete = fileStats.slice(keepCount);
-    
+
     // Also delete files older than MAX_SEGMENT_AGE
     const oldFiles = fileStats.filter(file => file.age > MAX_SEGMENT_AGE);
-    
+
     const toDelete = [...new Set([...filesToDelete, ...oldFiles])];
-    
+
     for (const file of toDelete) {
       try {
         sizeFreed += file.size;
         fs.unlinkSync(file.path);
         cleanedFiles++;
-        console.log(`Cleaned up old segment: ${file.name} (age: ${Math.round(file.age/1000)}s)`);
+        console.log(`Cleaned up old segment: ${file.name} (age: ${Math.round(file.age / 1000)}s)`);
       } catch (error) {
         console.error(`Error deleting file ${file.path}:`, error);
       }
     }
-    
+
   } catch (error) {
     console.error(`Error cleaning up channel ${channelId} segments:`, error);
   }
-  
+
   return { cleaned: cleanedFiles, size_freed: sizeFreed };
 };
 
@@ -440,10 +441,10 @@ const cleanupOrphanedDirectories = async () => {
   if (!fs.existsSync(HLS_OUTPUT_BASE)) {
     return { cleaned: 0, size_freed: 0 };
   }
-  
+
   let cleanedDirs = 0;
   let sizeFreed = 0;
-  
+
   try {
     // Get all active channel IDs
     const activeChannelIds = await new Promise((resolve, reject) => {
@@ -459,17 +460,17 @@ const cleanupOrphanedDirectories = async () => {
         }
       );
     });
-    
+
     const activeChannelSet = new Set(activeChannelIds);
     const dirs = fs.readdirSync(HLS_OUTPUT_BASE);
-    
+
     for (const dir of dirs) {
       if (!dir.startsWith('channel_')) continue;
-      
+
       const channelId = parseInt(dir.replace('channel_', ''));
       const dirPath = path.join(HLS_OUTPUT_BASE, dir);
       const dirAge = getFileAge(dirPath);
-      
+
       // Clean up if channel is not active or directory is old
       if (!activeChannelSet.has(channelId) && dirAge > ORPHANED_DIR_CLEANUP_AGE) {
         try {
@@ -477,18 +478,18 @@ const cleanupOrphanedDirectories = async () => {
           fs.rmSync(dirPath, { recursive: true, force: true });
           sizeFreed += dirSize;
           cleanedDirs++;
-          console.log(`Cleaned up orphaned directory: ${dir} (${Math.round(dirSize/1024/1024)}MB)`);
+          console.log(`Cleaned up orphaned directory: ${dir} (${Math.round(dirSize / 1024 / 1024)}MB)`);
           logAction('cleanup_orphaned', `Cleaned up orphaned directory for channel ${channelId}`);
         } catch (error) {
           console.error(`Error cleaning up orphaned directory ${dir}:`, error);
         }
       }
     }
-    
+
   } catch (error) {
     console.error('Error cleaning up orphaned directories:', error);
   }
-  
+
   return { cleaned: cleanedDirs, size_freed: sizeFreed };
 };
 
@@ -497,71 +498,71 @@ const cleanupOversizedDirectories = async () => {
   if (!fs.existsSync(HLS_OUTPUT_BASE)) {
     return { cleaned: 0, size_freed: 0 };
   }
-  
+
   let totalCleaned = 0;
   let totalSizeFreed = 0;
-  
+
   try {
     const dirs = fs.readdirSync(HLS_OUTPUT_BASE);
-    
+
     for (const dir of dirs) {
       if (!dir.startsWith('channel_')) continue;
-      
+
       const channelId = parseInt(dir.replace('channel_', ''));
       const dirPath = path.join(HLS_OUTPUT_BASE, dir);
       const dirSize = getDirectorySize(dirPath);
-      
+
       if (dirSize > MAX_CHANNEL_DIR_SIZE) {
-        console.log(`Channel ${channelId} directory oversized: ${Math.round(dirSize/1024/1024)}MB`);
+        console.log(`Channel ${channelId} directory oversized: ${Math.round(dirSize / 1024 / 1024)}MB`);
         const result = await cleanupChannelSegments(channelId);
         totalCleaned += result.cleaned;
         totalSizeFreed += result.size_freed;
-        
-        logAction('cleanup_oversized', `Cleaned oversized directory for channel ${channelId}: freed ${Math.round(result.size_freed/1024/1024)}MB`);
+
+        logAction('cleanup_oversized', `Cleaned oversized directory for channel ${channelId}: freed ${Math.round(result.size_freed / 1024 / 1024)}MB`);
       }
     }
-    
+
   } catch (error) {
     console.error('Error cleaning up oversized directories:', error);
   }
-  
+
   return { cleaned: totalCleaned, size_freed: totalSizeFreed };
 };
 
 // Periodic cleanup function
 const performPeriodicCleanup = async () => {
   console.log('Starting periodic transcoding cleanup...');
-  
+
   try {
     const startTime = Date.now();
     let totalCleaned = 0;
     let totalSizeFreed = 0;
-    
+
     // 1. Clean up segments for all active channels
     for (const [channelId] of activeProcesses) {
       const result = await cleanupChannelSegments(channelId);
       totalCleaned += result.cleaned;
       totalSizeFreed += result.size_freed;
     }
-    
+
     // 2. Clean up orphaned directories
     const orphanedResult = await cleanupOrphanedDirectories();
     totalCleaned += orphanedResult.cleaned;
     totalSizeFreed += orphanedResult.size_freed;
-    
+
     // 3. Clean up oversized directories
     const oversizedResult = await cleanupOversizedDirectories();
     totalCleaned += oversizedResult.cleaned;
     totalSizeFreed += oversizedResult.size_freed;
-    
+
     const duration = Date.now() - startTime;
-    const message = `Periodic cleanup completed: ${totalCleaned} items cleaned, ${Math.round(totalSizeFreed/1024/1024)}MB freed in ${duration}ms`;
+    const message = `Periodic cleanup completed: ${totalCleaned} items cleaned, ${Math.round(totalSizeFreed / 1024 / 1024)}MB freed in ${duration}ms`;
     console.log(message);
-    
+
     if (totalCleaned > 0 || totalSizeFreed > 0) {
       logAction('periodic_cleanup', message);
     }
-    
+
   } catch (error) {
     console.error('Error during periodic cleanup:', error);
     logAction('cleanup_error', `Periodic cleanup error: ${error.message}`);
@@ -573,10 +574,10 @@ const startCleanupScheduler = () => {
   if (cleanupInterval) {
     clearInterval(cleanupInterval);
   }
-  
-  console.log(`Starting cleanup scheduler with ${CLEANUP_INTERVAL/1000}s interval`);
+
+  console.log(`Starting cleanup scheduler with ${CLEANUP_INTERVAL / 1000}s interval`);
   cleanupInterval = setInterval(performPeriodicCleanup, CLEANUP_INTERVAL);
-  
+
   // Run initial cleanup after a short delay
   setTimeout(performPeriodicCleanup, 10000); // 10 seconds after start
 };
@@ -593,21 +594,21 @@ const stopCleanupScheduler = () => {
 // Startup cleanup - clean stale segments and directories
 const performStartupCleanup = async () => {
   console.log('Performing startup cleanup...');
-  
+
   try {
     // Clean up all directories on startup
     const orphanedResult = await cleanupOrphanedDirectories();
     const oversizedResult = await cleanupOversizedDirectories();
-    
+
     const totalCleaned = orphanedResult.cleaned + oversizedResult.cleaned;
     const totalSizeFreed = orphanedResult.size_freed + oversizedResult.size_freed;
-    
+
     if (totalCleaned > 0 || totalSizeFreed > 0) {
-      const message = `Startup cleanup completed: ${totalCleaned} items cleaned, ${Math.round(totalSizeFreed/1024/1024)}MB freed`;
+      const message = `Startup cleanup completed: ${totalCleaned} items cleaned, ${Math.round(totalSizeFreed / 1024 / 1024)}MB freed`;
       console.log(message);
       logAction('startup_cleanup', message);
     }
-    
+
   } catch (error) {
     console.error('Error during startup cleanup:', error);
   }
@@ -622,19 +623,19 @@ const getStorageStats = () => {
       channels: []
     };
   }
-  
+
   try {
     const dirs = fs.readdirSync(HLS_OUTPUT_BASE);
     const channelDirs = dirs.filter(dir => dir.startsWith('channel_'));
-    
+
     let totalSize = 0;
     const channels = [];
-    
+
     for (const dir of channelDirs) {
       const channelId = parseInt(dir.replace('channel_', ''));
       const dirPath = path.join(HLS_OUTPUT_BASE, dir);
       const dirSize = getDirectorySize(dirPath);
-      
+
       totalSize += dirSize;
       channels.push({
         channel_id: channelId,
@@ -644,14 +645,14 @@ const getStorageStats = () => {
         is_oversized: dirSize > MAX_CHANNEL_DIR_SIZE
       });
     }
-    
+
     return {
       total_directories: channelDirs.length,
       total_size_bytes: totalSize,
       total_size_mb: Math.round(totalSize / 1024 / 1024 * 100) / 100,
       channels: channels.sort((a, b) => b.size_bytes - a.size_bytes)
     };
-    
+
   } catch (error) {
     console.error('Error getting storage stats:', error);
     return { error: error.message };
@@ -662,27 +663,27 @@ const getStorageStats = () => {
 const initializeTranscoding = async () => {
   try {
     console.log('Initializing transcoding service...');
-    
+
     // Create base HLS output directory
     if (!fs.existsSync(HLS_OUTPUT_BASE)) {
       fs.mkdirSync(HLS_OUTPUT_BASE, { recursive: true });
       console.log(`Created HLS output base directory: ${HLS_OUTPUT_BASE}`);
     }
-    
+
     // Perform startup cleanup with error handling
     try {
       await performStartupCleanup();
     } catch (error) {
       console.error('Startup cleanup failed, but continuing initialization:', error);
     }
-    
+
     // Start cleanup scheduler with error handling
     try {
       startCleanupScheduler();
     } catch (error) {
       console.error('Failed to start cleanup scheduler, but continuing initialization:', error);
     }
-    
+
     // Find channels that were being transcoded when server stopped
     const activeChannels = await new Promise((resolve, reject) => {
       db.all(
@@ -700,7 +701,7 @@ const initializeTranscoding = async () => {
         }
       );
     });
-    
+
     // Restart transcoding for channels that were active
     for (const channel of activeChannels) {
       if (channel.transcoding_enabled) {
@@ -713,9 +714,9 @@ const initializeTranscoding = async () => {
         }
       }
     }
-    
+
     console.log('Transcoding service initialized successfully');
-    
+
   } catch (error) {
     console.error('Error initializing transcoding service:', error);
   }
@@ -724,14 +725,14 @@ const initializeTranscoding = async () => {
 // Cleanup function for graceful shutdown
 const cleanup = async () => {
   console.log('Cleaning up transcoding processes...');
-  
+
   // Stop cleanup scheduler
   try {
     stopCleanupScheduler();
   } catch (error) {
     console.error('Error stopping cleanup scheduler:', error);
   }
-  
+
   // Stop all active processes
   for (const [channelId, { process, channelName }] of activeProcesses) {
     try {
@@ -742,7 +743,7 @@ const cleanup = async () => {
       console.error(`Error stopping transcoding for channel ${channelId}:`, error);
     }
   }
-  
+
   activeProcesses.clear();
   console.log('Transcoding cleanup completed');
 };
