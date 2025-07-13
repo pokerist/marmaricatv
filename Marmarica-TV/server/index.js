@@ -13,8 +13,8 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const UPLOAD_DIR = process.env.UPLOAD_DIR || 'uploads';
-const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://155.138.231.215:3000';
-const API_URL = process.env.API_URL || `http://155.138.231.215:${PORT}`;
+const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://192.168.100.232:3000';
+const API_URL = process.env.API_URL || `http://192.168.100.232:${PORT}`;
 
 // Middleware
 app.use(cors({

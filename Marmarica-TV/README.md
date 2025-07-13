@@ -112,8 +112,8 @@ PORT=5000
 SESSION_SECRET=your-secure-random-string  # Change this!
 
 # CORS Configuration
-CORS_ORIGIN=http://155.138.231.215:3000
-API_URL=http://155.138.231.215:5000
+CORS_ORIGIN=http://192.168.100.232:3000
+API_URL=http://192.168.100.232:5000
 
 # Optional
 UPLOAD_DIR=uploads  # Default: uploads
@@ -122,12 +122,12 @@ UPLOAD_DIR=uploads  # Default: uploads
 2. Create client/.env file:
 ```env
 # API Configuration
-REACT_APP_API_URL=http://155.138.231.215:5000/api
+REACT_APP_API_URL=http://192.168.100.232:5000/api
 REACT_APP_API_TIMEOUT=8000
 REACT_APP_API_RETRIES=2
 
 # Upload URL
-REACT_APP_UPLOADS_URL=http://155.138.231.215:5000/uploads
+REACT_APP_UPLOADS_URL=http://192.168.100.232:5000/uploads
 ```
 
 #### Production Environment
@@ -140,8 +140,8 @@ PORT=5000
 SESSION_SECRET=your-secure-random-string  # Change this!
 
 # CORS Configuration
-CORS_ORIGIN=http://155.138.231.215
-API_URL=http://155.138.231.215
+CORS_ORIGIN=http://192.168.100.232
+API_URL=http://192.168.100.232
 
 # Optional
 UPLOAD_DIR=uploads
@@ -150,12 +150,12 @@ UPLOAD_DIR=uploads
 2. Update client/.env:
 ```env
 # API Configuration
-REACT_APP_API_URL=http://155.138.231.215/api
+REACT_APP_API_URL=http://192.168.100.232/api
 REACT_APP_API_TIMEOUT=8000
 REACT_APP_API_RETRIES=2
 
 # Upload URL
-REACT_APP_UPLOADS_URL=http://155.138.231.215/uploads
+REACT_APP_UPLOADS_URL=http://192.168.100.232/uploads
 ```
 
 ### 3. Database Initialization
@@ -253,17 +253,17 @@ npm run dev  # Uses nodemon for auto-reload
 
 3. Verify the server output:
    - Should see "Server running on port 5000"
-   - Should see "CORS enabled for origin: http://155.138.231.215:3000"
+   - Should see "CORS enabled for origin: http://192.168.100.232:3000"
    - Should see database initialization messages
 
 4. Start the frontend development server:
 ```bash
 cd client
-npm start    # Runs on http://155.138.231.215:3000
+npm start    # Runs on http://192.168.100.232:3000
 ```
 
 5. Access the admin panel:
-   - Open http://155.138.231.215:3000 in your browser
+   - Open http://192.168.100.232:3000 in your browser
    - You should see the login page
    - Check browser console for API configuration message
    - Log in with the admin credentials
@@ -271,7 +271,7 @@ npm start    # Runs on http://155.138.231.215:3000
 6. Test client APIs:
 ```bash
 # Should return channel list
-curl http://155.138.231.215:5000/api/client/channels
+curl http://192.168.100.232:5000/api/client/channels
 ```
 
 7. Troubleshooting:
@@ -282,14 +282,14 @@ curl http://155.138.231.215:5000/api/client/channels
 ### 7. Production Deployment
 
 1. Access the admin panel:
-   - Open http://155.138.231.215:3000 in your browser
+   - Open http://192.168.100.232:3000 in your browser
    - You should see the login page
    - Log in with the admin credentials
 
 2. Test client APIs:
    ```bash
    # Should return channel list
-   curl http://155.138.231.215/api/client/channels
+   curl http://192.168.100.232/api/client/channels
    ```
 
 ## Admin User Management
