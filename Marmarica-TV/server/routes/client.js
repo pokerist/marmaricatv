@@ -31,6 +31,17 @@ function getAllNews() {
   });
 }
 
+// Helper function to process channel URL - return transcoded URL if active
+function processChannelUrl(channel) {
+  if (channel.transcoding_enabled && 
+      channel.transcoding_status === 'active' && 
+      channel.transcoded_url) {
+    // Replace the original URL with the transcoded URL
+    channel.url = channel.transcoded_url;
+  }
+  return channel;
+}
+
 // Helper function to get channels by types
 function getChannelsByTypes(types) {
   return new Promise((resolve, reject) => {
@@ -43,7 +54,11 @@ function getChannelsByTypes(types) {
       typeArray,
       (err, rows) => {
         if (err) reject(err);
-        else resolve(rows);
+        else {
+          // Process each channel to return transcoded URL if active
+          const processedRows = rows.map(channel => processChannelUrl(channel));
+          resolve(processedRows);
+        }
       }
     );
   });

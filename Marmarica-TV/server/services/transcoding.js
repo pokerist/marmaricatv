@@ -6,6 +6,7 @@ const { db } = require('../index');
 // Configuration
 const HLS_OUTPUT_BASE = process.env.HLS_OUTPUT_BASE || '/var/www/html/hls_stream';
 const FFMPEG_PATH = process.env.FFMPEG_PATH || 'ffmpeg';
+const SERVER_BASE_URL = process.env.SERVER_BASE_URL || 'http://192.168.100.232';
 
 // Store active FFmpeg processes
 const activeProcesses = new Map();
@@ -191,7 +192,7 @@ const startTranscoding = async (channelId, inputUrl, channelName) => {
       if (code === 0) {
         // Process completed successfully
         await updateJobStatus(jobId, 'completed');
-        await updateChannelStatus(channelId, 'active', `http://192.168.100.232/hls_stream/channel_${channelId}/output.m3u8`);
+        await updateChannelStatus(channelId, 'active', `${SERVER_BASE_URL}/hls_stream/channel_${channelId}/output.m3u8`);
         logAction('transcoding_completed', `Transcoding completed for channel: ${channelName}`);
       } else {
         // Process failed
@@ -216,7 +217,7 @@ const startTranscoding = async (channelId, inputUrl, channelName) => {
     // Give it a moment to start, then update status
     setTimeout(async () => {
       if (activeProcesses.has(channelId)) {
-        await updateChannelStatus(channelId, 'active', `http://192.168.100.232/hls_stream/channel_${channelId}/output.m3u8`);
+        await updateChannelStatus(channelId, 'active', `${SERVER_BASE_URL}/hls_stream/channel_${channelId}/output.m3u8`);
         logAction('transcoding_started', `Transcoding started for channel: ${channelName}`);
       }
     }, 2000);
