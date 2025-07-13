@@ -90,10 +90,9 @@ function asyncHandler(fn) {
   };
 }
 
-// Helper function to process channel URL - return transcoded URL if active
+// Helper function to process channel URL - return transcoded URL if enabled
 function processChannelUrl(channel) {
   if (channel.transcoding_enabled && 
-      channel.transcoding_status === 'active' && 
       channel.transcoded_url) {
     // Replace the original URL with the transcoded URL
     channel.url = channel.transcoded_url;
