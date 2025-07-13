@@ -127,8 +127,8 @@ const generateFFmpegCommand = (inputUrl, channelId) => {
     '-hls_segment_type', 'fmp4',
     '-hls_segment_filename', segmentPath,
     '-hls_start_number_source', 'epoch',
-    '-hls_list_size', HLS_LIST_SIZE.toString(),
-    '-hls_delete_threshold', '0', // More aggressive cleanup
+    '-hls_list_size', Math.max(HLS_LIST_SIZE, 4).toString(), // Ensure minimum 4 segments
+    '-hls_delete_threshold', '1', // Less aggressive initially
     outputPath
   ];
   
@@ -139,12 +139,21 @@ const generateFFmpegCommand = (inputUrl, channelId) => {
 const startTranscoding = async (channelId, inputUrl, channelName) => {
   try {
     console.log(`Starting transcoding for channel ${channelId}: ${channelName}`);
+    console.log(`Input URL: ${inputUrl}`);
+    console.log(`FFmpeg path: ${FFMPEG_PATH}`);
+    console.log(`HLS output base: ${HLS_OUTPUT_BASE}`);
+    
+    // Validate input parameters
+    if (!inputUrl || !inputUrl.trim()) {
+      throw new Error('Input URL is required');
+    }
     
     // Update channel status to starting
     await updateChannelStatus(channelId, 'starting');
     
     // Generate FFmpeg command
     const { command, outputPath } = generateFFmpegCommand(inputUrl, channelId);
+    console.log(`FFmpeg command: ${FFMPEG_PATH} ${command.join(' ')}`);
     
     // Create transcoding job record
     const now = new Date().toISOString();
@@ -163,9 +172,26 @@ const startTranscoding = async (channelId, inputUrl, channelName) => {
       );
     });
     
-    // Spawn FFmpeg process
-    const ffmpegProcess = spawn(FFMPEG_PATH, command);
+    // Spawn FFmpeg process with detailed error handling
+    let ffmpegProcess;
+    try {
+      ffmpegProcess = spawn(FFMPEG_PATH, command);
+    } catch (spawnError) {
+      console.error('Failed to spawn FFmpeg process:', spawnError);
+      await updateJobStatus(jobId, 'failed', `Failed to spawn FFmpeg: ${spawnError.message}`);
+      await updateChannelStatus(channelId, 'failed');
+      throw spawnError;
+    }
+    
     const pid = ffmpegProcess.pid;
+    
+    if (!pid) {
+      const error = new Error('FFmpeg process failed to start - no PID');
+      console.error(error.message);
+      await updateJobStatus(jobId, 'failed', error.message);
+      await updateChannelStatus(channelId, 'failed');
+      throw error;
+    }
     
     console.log(`Started FFmpeg process with PID: ${pid}`);
     
@@ -322,61 +348,6 @@ const getActiveJobs = () => {
       }
     );
   });
-};
-
-// Initialize transcoding service on server start
-const initializeTranscoding = async () => {
-  try {
-    console.log('Initializing transcoding service...');
-    
-    // Create base HLS output directory
-    if (!fs.existsSync(HLS_OUTPUT_BASE)) {
-      fs.mkdirSync(HLS_OUTPUT_BASE, { recursive: true });
-      console.log(`Created HLS output base directory: ${HLS_OUTPUT_BASE}`);
-    }
-    
-    // Perform startup cleanup
-    await performStartupCleanup();
-    
-    // Start cleanup scheduler
-    startCleanupScheduler();
-    
-    // Find channels that were being transcoded when server stopped
-    const activeChannels = await new Promise((resolve, reject) => {
-      db.all(
-        `SELECT c.*, j.id as job_id 
-         FROM channels c 
-         LEFT JOIN transcoding_jobs j ON c.id = j.channel_id 
-         WHERE c.transcoding_enabled = 1 AND c.transcoding_status != 'inactive'`,
-        (err, rows) => {
-          if (err) {
-            console.error('Error fetching active channels:', err.message);
-            reject(err);
-          } else {
-            resolve(rows);
-          }
-        }
-      );
-    });
-    
-    // Restart transcoding for channels that were active
-    for (const channel of activeChannels) {
-      if (channel.transcoding_enabled) {
-        console.log(`Restarting transcoding for channel: ${channel.name}`);
-        try {
-          await restartTranscoding(channel.id, channel.url, channel.name);
-        } catch (error) {
-          console.error(`Failed to restart transcoding for channel ${channel.id}:`, error);
-          await updateChannelStatus(channel.id, 'failed');
-        }
-      }
-    }
-    
-    console.log('Transcoding service initialized with cleanup scheduler');
-    
-  } catch (error) {
-    console.error('Error initializing transcoding service:', error);
-  }
 };
 
 // Helper function to get directory size
@@ -687,12 +658,79 @@ const getStorageStats = () => {
   }
 };
 
+// Initialize transcoding service on server start
+const initializeTranscoding = async () => {
+  try {
+    console.log('Initializing transcoding service...');
+    
+    // Create base HLS output directory
+    if (!fs.existsSync(HLS_OUTPUT_BASE)) {
+      fs.mkdirSync(HLS_OUTPUT_BASE, { recursive: true });
+      console.log(`Created HLS output base directory: ${HLS_OUTPUT_BASE}`);
+    }
+    
+    // Perform startup cleanup with error handling
+    try {
+      await performStartupCleanup();
+    } catch (error) {
+      console.error('Startup cleanup failed, but continuing initialization:', error);
+    }
+    
+    // Start cleanup scheduler with error handling
+    try {
+      startCleanupScheduler();
+    } catch (error) {
+      console.error('Failed to start cleanup scheduler, but continuing initialization:', error);
+    }
+    
+    // Find channels that were being transcoded when server stopped
+    const activeChannels = await new Promise((resolve, reject) => {
+      db.all(
+        `SELECT c.*, j.id as job_id 
+         FROM channels c 
+         LEFT JOIN transcoding_jobs j ON c.id = j.channel_id 
+         WHERE c.transcoding_enabled = 1 AND c.transcoding_status != 'inactive'`,
+        (err, rows) => {
+          if (err) {
+            console.error('Error fetching active channels:', err.message);
+            reject(err);
+          } else {
+            resolve(rows);
+          }
+        }
+      );
+    });
+    
+    // Restart transcoding for channels that were active
+    for (const channel of activeChannels) {
+      if (channel.transcoding_enabled) {
+        console.log(`Restarting transcoding for channel: ${channel.name}`);
+        try {
+          await restartTranscoding(channel.id, channel.url, channel.name);
+        } catch (error) {
+          console.error(`Failed to restart transcoding for channel ${channel.id}:`, error);
+          await updateChannelStatus(channel.id, 'failed');
+        }
+      }
+    }
+    
+    console.log('Transcoding service initialized successfully');
+    
+  } catch (error) {
+    console.error('Error initializing transcoding service:', error);
+  }
+};
+
 // Cleanup function for graceful shutdown
 const cleanup = async () => {
   console.log('Cleaning up transcoding processes...');
   
   // Stop cleanup scheduler
-  stopCleanupScheduler();
+  try {
+    stopCleanupScheduler();
+  } catch (error) {
+    console.error('Error stopping cleanup scheduler:', error);
+  }
   
   // Stop all active processes
   for (const [channelId, { process, channelName }] of activeProcesses) {
