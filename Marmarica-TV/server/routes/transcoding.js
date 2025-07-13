@@ -340,4 +340,76 @@ router.get('/stats', asyncHandler(async (req, res) => {
   }
 }));
 
+// Get storage statistics
+router.get('/storage', asyncHandler(async (req, res) => {
+  try {
+    const storageStats = transcodingService.getStorageStats();
+    res.json({ data: storageStats });
+  } catch (error) {
+    console.error('Error fetching storage stats:', error);
+    res.status(500).json({ error: 'Failed to fetch storage statistics' });
+  }
+}));
+
+// Manual cleanup trigger
+router.post('/cleanup', asyncHandler(async (req, res) => {
+  try {
+    console.log('Manual cleanup triggered via API');
+    await transcodingService.performPeriodicCleanup();
+    
+    res.json({
+      message: 'Manual cleanup completed successfully',
+      data: { cleanup_triggered: true }
+    });
+    
+  } catch (error) {
+    console.error('Error during manual cleanup:', error);
+    res.status(500).json({ error: 'Failed to perform cleanup' });
+  }
+}));
+
+// Clean up specific channel segments
+router.post('/cleanup/:channelId', asyncHandler(async (req, res) => {
+  const { channelId } = req.params;
+  
+  try {
+    // Get channel info
+    const channel = await new Promise((resolve, reject) => {
+      db.get(
+        'SELECT id, name FROM channels WHERE id = ?',
+        [channelId],
+        (err, row) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(row);
+          }
+        }
+      );
+    });
+    
+    if (!channel) {
+      return res.status(404).json({ error: 'Channel not found' });
+    }
+    
+    console.log(`Manual cleanup triggered for channel ${channelId}: ${channel.name}`);
+    const result = await transcodingService.cleanupChannelSegments(parseInt(channelId));
+    
+    res.json({
+      message: `Cleanup completed for channel: ${channel.name}`,
+      data: {
+        channel_id: parseInt(channelId),
+        channel_name: channel.name,
+        files_cleaned: result.cleaned,
+        size_freed_bytes: result.size_freed,
+        size_freed_mb: Math.round(result.size_freed / 1024 / 1024 * 100) / 100
+      }
+    });
+    
+  } catch (error) {
+    console.error('Error during channel cleanup:', error);
+    res.status(500).json({ error: 'Failed to cleanup channel segments' });
+  }
+}));
+
 module.exports = router;

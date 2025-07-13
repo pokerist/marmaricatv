@@ -8,8 +8,18 @@ const HLS_OUTPUT_BASE = process.env.HLS_OUTPUT_BASE || '/var/www/html/hls_stream
 const FFMPEG_PATH = process.env.FFMPEG_PATH || 'ffmpeg';
 const SERVER_BASE_URL = process.env.SERVER_BASE_URL || 'http://192.168.100.232';
 
+// Cleanup configuration
+const CLEANUP_INTERVAL = parseInt(process.env.CLEANUP_INTERVAL) || 5 * 60 * 1000; // 5 minutes
+const MAX_SEGMENT_AGE = parseInt(process.env.MAX_SEGMENT_AGE) || 30 * 1000; // 30 seconds
+const MAX_CHANNEL_DIR_SIZE = parseInt(process.env.MAX_CHANNEL_DIR_SIZE) || 100 * 1024 * 1024; // 100MB
+const HLS_LIST_SIZE = parseInt(process.env.HLS_LIST_SIZE) || 3; // Number of segments to keep
+const ORPHANED_DIR_CLEANUP_AGE = parseInt(process.env.ORPHANED_DIR_CLEANUP_AGE) || 60 * 60 * 1000; // 1 hour
+
 // Store active FFmpeg processes
 const activeProcesses = new Map();
+
+// Store cleanup interval
+let cleanupInterval = null;
 
 // Helper function to log actions
 const logAction = (actionType, description) => {
@@ -94,7 +104,7 @@ const createOutputDirectory = (channelId) => {
   return outputDir;
 };
 
-// Generate FFmpeg command for LL-HLS transcoding
+// Generate FFmpeg command for LL-HLS transcoding with enhanced cleanup
 const generateFFmpegCommand = (inputUrl, channelId) => {
   const outputDir = createOutputDirectory(channelId);
   const outputPath = path.join(outputDir, 'output.m3u8');
@@ -113,12 +123,12 @@ const generateFFmpegCommand = (inputUrl, channelId) => {
     '-f', 'hls',
     '-hls_time', '0.5',
     '-hls_playlist_type', 'event',
-    '-hls_flags', 'independent_segments+delete_segments+append_list+split_by_time+program_date_time',
+    '-hls_flags', 'independent_segments+delete_segments+split_by_time+program_date_time',
     '-hls_segment_type', 'fmp4',
     '-hls_segment_filename', segmentPath,
     '-hls_start_number_source', 'epoch',
-    '-hls_list_size', '6',
-    '-hls_delete_threshold', '1',
+    '-hls_list_size', HLS_LIST_SIZE.toString(),
+    '-hls_delete_threshold', '0', // More aggressive cleanup
     outputPath
   ];
   
@@ -325,6 +335,12 @@ const initializeTranscoding = async () => {
       console.log(`Created HLS output base directory: ${HLS_OUTPUT_BASE}`);
     }
     
+    // Perform startup cleanup
+    await performStartupCleanup();
+    
+    // Start cleanup scheduler
+    startCleanupScheduler();
+    
     // Find channels that were being transcoded when server stopped
     const activeChannels = await new Promise((resolve, reject) => {
       db.all(
@@ -356,16 +372,327 @@ const initializeTranscoding = async () => {
       }
     }
     
-    console.log('Transcoding service initialized');
+    console.log('Transcoding service initialized with cleanup scheduler');
     
   } catch (error) {
     console.error('Error initializing transcoding service:', error);
   }
 };
 
+// Helper function to get directory size
+const getDirectorySize = (dirPath) => {
+  let totalSize = 0;
+  try {
+    if (!fs.existsSync(dirPath)) return 0;
+    
+    const files = fs.readdirSync(dirPath);
+    for (const file of files) {
+      const filePath = path.join(dirPath, file);
+      const stats = fs.statSync(filePath);
+      if (stats.isFile()) {
+        totalSize += stats.size;
+      }
+    }
+  } catch (error) {
+    console.error(`Error calculating directory size for ${dirPath}:`, error);
+  }
+  return totalSize;
+};
+
+// Helper function to get file age in milliseconds
+const getFileAge = (filePath) => {
+  try {
+    const stats = fs.statSync(filePath);
+    return Date.now() - stats.mtime.getTime();
+  } catch (error) {
+    return Infinity; // Consider files we can't stat as very old
+  }
+};
+
+// Aggressive segment cleanup for a specific channel
+const cleanupChannelSegments = async (channelId) => {
+  const channelDir = path.join(HLS_OUTPUT_BASE, `channel_${channelId}`);
+  
+  if (!fs.existsSync(channelDir)) {
+    return { cleaned: 0, size_freed: 0 };
+  }
+  
+  let cleanedFiles = 0;
+  let sizeFreed = 0;
+  
+  try {
+    const files = fs.readdirSync(channelDir);
+    const segmentFiles = files.filter(file => 
+      file.endsWith('.m4s') || file.endsWith('.ts')
+    );
+    
+    // Sort by modification time (oldest first)
+    const fileStats = segmentFiles.map(file => {
+      const filePath = path.join(channelDir, file);
+      return {
+        name: file,
+        path: filePath,
+        age: getFileAge(filePath),
+        size: fs.statSync(filePath).size
+      };
+    }).sort((a, b) => b.age - a.age);
+    
+    // Keep only the newest segments according to HLS_LIST_SIZE + buffer
+    const keepCount = HLS_LIST_SIZE + 2; // Keep a couple extra for safety
+    const filesToDelete = fileStats.slice(keepCount);
+    
+    // Also delete files older than MAX_SEGMENT_AGE
+    const oldFiles = fileStats.filter(file => file.age > MAX_SEGMENT_AGE);
+    
+    const toDelete = [...new Set([...filesToDelete, ...oldFiles])];
+    
+    for (const file of toDelete) {
+      try {
+        sizeFreed += file.size;
+        fs.unlinkSync(file.path);
+        cleanedFiles++;
+        console.log(`Cleaned up old segment: ${file.name} (age: ${Math.round(file.age/1000)}s)`);
+      } catch (error) {
+        console.error(`Error deleting file ${file.path}:`, error);
+      }
+    }
+    
+  } catch (error) {
+    console.error(`Error cleaning up channel ${channelId} segments:`, error);
+  }
+  
+  return { cleaned: cleanedFiles, size_freed: sizeFreed };
+};
+
+// Cleanup orphaned directories (channels no longer active)
+const cleanupOrphanedDirectories = async () => {
+  if (!fs.existsSync(HLS_OUTPUT_BASE)) {
+    return { cleaned: 0, size_freed: 0 };
+  }
+  
+  let cleanedDirs = 0;
+  let sizeFreed = 0;
+  
+  try {
+    // Get all active channel IDs
+    const activeChannelIds = await new Promise((resolve, reject) => {
+      db.all(
+        'SELECT id FROM channels WHERE transcoding_enabled = 1 AND transcoding_status IN (?, ?, ?)',
+        ['active', 'starting', 'running'],
+        (err, rows) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(rows.map(row => row.id));
+          }
+        }
+      );
+    });
+    
+    const activeChannelSet = new Set(activeChannelIds);
+    const dirs = fs.readdirSync(HLS_OUTPUT_BASE);
+    
+    for (const dir of dirs) {
+      if (!dir.startsWith('channel_')) continue;
+      
+      const channelId = parseInt(dir.replace('channel_', ''));
+      const dirPath = path.join(HLS_OUTPUT_BASE, dir);
+      const dirAge = getFileAge(dirPath);
+      
+      // Clean up if channel is not active or directory is old
+      if (!activeChannelSet.has(channelId) && dirAge > ORPHANED_DIR_CLEANUP_AGE) {
+        try {
+          const dirSize = getDirectorySize(dirPath);
+          fs.rmSync(dirPath, { recursive: true, force: true });
+          sizeFreed += dirSize;
+          cleanedDirs++;
+          console.log(`Cleaned up orphaned directory: ${dir} (${Math.round(dirSize/1024/1024)}MB)`);
+          logAction('cleanup_orphaned', `Cleaned up orphaned directory for channel ${channelId}`);
+        } catch (error) {
+          console.error(`Error cleaning up orphaned directory ${dir}:`, error);
+        }
+      }
+    }
+    
+  } catch (error) {
+    console.error('Error cleaning up orphaned directories:', error);
+  }
+  
+  return { cleaned: cleanedDirs, size_freed: sizeFreed };
+};
+
+// Monitor and cleanup directories that exceed size limits
+const cleanupOversizedDirectories = async () => {
+  if (!fs.existsSync(HLS_OUTPUT_BASE)) {
+    return { cleaned: 0, size_freed: 0 };
+  }
+  
+  let totalCleaned = 0;
+  let totalSizeFreed = 0;
+  
+  try {
+    const dirs = fs.readdirSync(HLS_OUTPUT_BASE);
+    
+    for (const dir of dirs) {
+      if (!dir.startsWith('channel_')) continue;
+      
+      const channelId = parseInt(dir.replace('channel_', ''));
+      const dirPath = path.join(HLS_OUTPUT_BASE, dir);
+      const dirSize = getDirectorySize(dirPath);
+      
+      if (dirSize > MAX_CHANNEL_DIR_SIZE) {
+        console.log(`Channel ${channelId} directory oversized: ${Math.round(dirSize/1024/1024)}MB`);
+        const result = await cleanupChannelSegments(channelId);
+        totalCleaned += result.cleaned;
+        totalSizeFreed += result.size_freed;
+        
+        logAction('cleanup_oversized', `Cleaned oversized directory for channel ${channelId}: freed ${Math.round(result.size_freed/1024/1024)}MB`);
+      }
+    }
+    
+  } catch (error) {
+    console.error('Error cleaning up oversized directories:', error);
+  }
+  
+  return { cleaned: totalCleaned, size_freed: totalSizeFreed };
+};
+
+// Periodic cleanup function
+const performPeriodicCleanup = async () => {
+  console.log('Starting periodic transcoding cleanup...');
+  
+  try {
+    const startTime = Date.now();
+    let totalCleaned = 0;
+    let totalSizeFreed = 0;
+    
+    // 1. Clean up segments for all active channels
+    for (const [channelId] of activeProcesses) {
+      const result = await cleanupChannelSegments(channelId);
+      totalCleaned += result.cleaned;
+      totalSizeFreed += result.size_freed;
+    }
+    
+    // 2. Clean up orphaned directories
+    const orphanedResult = await cleanupOrphanedDirectories();
+    totalCleaned += orphanedResult.cleaned;
+    totalSizeFreed += orphanedResult.size_freed;
+    
+    // 3. Clean up oversized directories
+    const oversizedResult = await cleanupOversizedDirectories();
+    totalCleaned += oversizedResult.cleaned;
+    totalSizeFreed += oversizedResult.size_freed;
+    
+    const duration = Date.now() - startTime;
+    const message = `Periodic cleanup completed: ${totalCleaned} items cleaned, ${Math.round(totalSizeFreed/1024/1024)}MB freed in ${duration}ms`;
+    console.log(message);
+    
+    if (totalCleaned > 0 || totalSizeFreed > 0) {
+      logAction('periodic_cleanup', message);
+    }
+    
+  } catch (error) {
+    console.error('Error during periodic cleanup:', error);
+    logAction('cleanup_error', `Periodic cleanup error: ${error.message}`);
+  }
+};
+
+// Start periodic cleanup scheduler
+const startCleanupScheduler = () => {
+  if (cleanupInterval) {
+    clearInterval(cleanupInterval);
+  }
+  
+  console.log(`Starting cleanup scheduler with ${CLEANUP_INTERVAL/1000}s interval`);
+  cleanupInterval = setInterval(performPeriodicCleanup, CLEANUP_INTERVAL);
+  
+  // Run initial cleanup after a short delay
+  setTimeout(performPeriodicCleanup, 10000); // 10 seconds after start
+};
+
+// Stop cleanup scheduler
+const stopCleanupScheduler = () => {
+  if (cleanupInterval) {
+    clearInterval(cleanupInterval);
+    cleanupInterval = null;
+    console.log('Cleanup scheduler stopped');
+  }
+};
+
+// Startup cleanup - clean stale segments and directories
+const performStartupCleanup = async () => {
+  console.log('Performing startup cleanup...');
+  
+  try {
+    // Clean up all directories on startup
+    const orphanedResult = await cleanupOrphanedDirectories();
+    const oversizedResult = await cleanupOversizedDirectories();
+    
+    const totalCleaned = orphanedResult.cleaned + oversizedResult.cleaned;
+    const totalSizeFreed = orphanedResult.size_freed + oversizedResult.size_freed;
+    
+    if (totalCleaned > 0 || totalSizeFreed > 0) {
+      const message = `Startup cleanup completed: ${totalCleaned} items cleaned, ${Math.round(totalSizeFreed/1024/1024)}MB freed`;
+      console.log(message);
+      logAction('startup_cleanup', message);
+    }
+    
+  } catch (error) {
+    console.error('Error during startup cleanup:', error);
+  }
+};
+
+// Get storage statistics
+const getStorageStats = () => {
+  if (!fs.existsSync(HLS_OUTPUT_BASE)) {
+    return {
+      total_directories: 0,
+      total_size: 0,
+      channels: []
+    };
+  }
+  
+  try {
+    const dirs = fs.readdirSync(HLS_OUTPUT_BASE);
+    const channelDirs = dirs.filter(dir => dir.startsWith('channel_'));
+    
+    let totalSize = 0;
+    const channels = [];
+    
+    for (const dir of channelDirs) {
+      const channelId = parseInt(dir.replace('channel_', ''));
+      const dirPath = path.join(HLS_OUTPUT_BASE, dir);
+      const dirSize = getDirectorySize(dirPath);
+      
+      totalSize += dirSize;
+      channels.push({
+        channel_id: channelId,
+        directory: dir,
+        size_bytes: dirSize,
+        size_mb: Math.round(dirSize / 1024 / 1024 * 100) / 100,
+        is_oversized: dirSize > MAX_CHANNEL_DIR_SIZE
+      });
+    }
+    
+    return {
+      total_directories: channelDirs.length,
+      total_size_bytes: totalSize,
+      total_size_mb: Math.round(totalSize / 1024 / 1024 * 100) / 100,
+      channels: channels.sort((a, b) => b.size_bytes - a.size_bytes)
+    };
+    
+  } catch (error) {
+    console.error('Error getting storage stats:', error);
+    return { error: error.message };
+  }
+};
+
 // Cleanup function for graceful shutdown
 const cleanup = async () => {
   console.log('Cleaning up transcoding processes...');
+  
+  // Stop cleanup scheduler
+  stopCleanupScheduler();
   
   // Stop all active processes
   for (const [channelId, { process, channelName }] of activeProcesses) {
@@ -388,5 +715,11 @@ module.exports = {
   restartTranscoding,
   getActiveJobs,
   initializeTranscoding,
-  cleanup
+  cleanup,
+  // Cleanup functions
+  cleanupChannelSegments,
+  performPeriodicCleanup,
+  getStorageStats,
+  startCleanupScheduler,
+  stopCleanupScheduler
 };

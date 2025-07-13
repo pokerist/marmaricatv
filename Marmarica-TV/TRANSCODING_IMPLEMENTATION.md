@@ -25,6 +25,9 @@ The transcoding feature allows administrators to:
 - **Status Tracking**: Update database with transcoding status
 - **Error Handling**: Restart failed processes automatically
 - **Graceful Shutdown**: Clean termination of all processes
+- **Storage Management**: Comprehensive cleanup system for segment files
+- **Periodic Cleanup**: Automatic scheduled cleanup to prevent storage bloat
+- **Storage Monitoring**: Track directory sizes and enforce limits
 
 #### 3. API Endpoints (`server/routes/transcoding.js`)
 - `GET /api/transcoding/jobs` - Get active transcoding jobs
@@ -35,6 +38,9 @@ The transcoding feature allows administrators to:
 - `POST /api/transcoding/toggle/:channelId` - Toggle transcoding on/off
 - `GET /api/transcoding/history/:channelId` - Get transcoding history
 - `GET /api/transcoding/stats` - Get transcoding statistics
+- `GET /api/transcoding/storage` - Get storage usage statistics
+- `POST /api/transcoding/cleanup` - Trigger manual cleanup
+- `POST /api/transcoding/cleanup/:channelId` - Clean up specific channel segments
 
 #### 4. Updated Channel Routes (`server/routes/channels.js`)
 - Integrated transcoding service calls in create/update/delete operations
@@ -83,8 +89,79 @@ ffmpeg -i "<input_url>" \
 - **Low Latency**: 0.5 second segments with zerolatency tune
 - **Efficient Encoding**: H.264 with veryfast preset
 - **Adaptive Bitrate**: AAC audio at 128k
-- **Segment Management**: Automatic cleanup of old segments
+- **Segment Management**: Enhanced automatic cleanup of old segments
 - **Format**: fMP4 segments for better compatibility
+
+## Storage Management & Cleanup System
+
+The transcoding system includes a comprehensive storage management solution to prevent disk space issues when running multiple channels simultaneously:
+
+### Cleanup Features
+
+#### 1. Enhanced FFmpeg Configuration
+- **Reduced segment count**: Configurable HLS list size (default: 3 segments)
+- **Aggressive deletion**: `hls_delete_threshold` set to 0 for immediate cleanup
+- **Automatic segment removal**: FFmpeg handles basic segment lifecycle
+
+#### 2. Periodic Cleanup Scheduler
+- **Scheduled intervals**: Runs every 5 minutes (configurable)
+- **Active channel cleanup**: Removes old segments from running channels
+- **Orphaned directory cleanup**: Removes directories for inactive channels
+- **Size monitoring**: Enforces per-channel storage limits
+
+#### 3. Cleanup Types
+
+**Segment Cleanup**
+- Keeps only the newest segments (HLS_LIST_SIZE + 2 buffer)
+- Removes segments older than MAX_SEGMENT_AGE (30 seconds default)
+- Logs cleanup actions for monitoring
+
+**Orphaned Directory Cleanup**
+- Identifies directories for inactive channels
+- Removes directories older than ORPHANED_DIR_CLEANUP_AGE (1 hour default)
+- Prevents accumulation of stale data
+
+**Oversized Directory Cleanup**
+- Monitors directory sizes against MAX_CHANNEL_DIR_SIZE (100MB default)
+- Triggers aggressive cleanup for oversized directories
+- Maintains system stability under heavy load
+
+#### 4. Storage Monitoring
+- **Real-time statistics**: Track total and per-channel storage usage
+- **Size calculations**: Monitor directory sizes in bytes and MB
+- **Cleanup logging**: Record all cleanup operations with timestamps
+
+### Configuration Options
+
+```env
+# Cleanup interval (5 minutes)
+CLEANUP_INTERVAL=300000
+
+# Maximum segment age (30 seconds)
+MAX_SEGMENT_AGE=30000
+
+# Maximum directory size per channel (100MB)
+MAX_CHANNEL_DIR_SIZE=104857600
+
+# HLS segments to keep (3 segments)
+HLS_LIST_SIZE=3
+
+# Orphaned directory cleanup age (1 hour)
+ORPHANED_DIR_CLEANUP_AGE=3600000
+```
+
+### Manual Cleanup Controls
+
+**API Endpoints**
+- `GET /api/transcoding/storage` - View storage statistics
+- `POST /api/transcoding/cleanup` - Trigger full cleanup
+- `POST /api/transcoding/cleanup/:channelId` - Clean specific channel
+
+**Cleanup Process**
+1. **Startup cleanup**: Runs when server starts
+2. **Periodic cleanup**: Scheduled background process
+3. **Manual cleanup**: On-demand via API
+4. **Channel-specific cleanup**: Targeted cleanup for individual channels
 
 ## File Structure
 
