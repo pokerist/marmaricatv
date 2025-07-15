@@ -13,7 +13,7 @@ cd marmaricatv/Marmarica-TV
 
 # Run automated deployment
 chmod +x deploy.sh
-sudo ./deploy.sh
+./deploy.sh
 
 # Verify deployment
 chmod +x scripts/verify.sh
