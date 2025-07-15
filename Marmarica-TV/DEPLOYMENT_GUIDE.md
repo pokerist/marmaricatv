@@ -2,7 +2,35 @@
 
 This guide provides step-by-step instructions for deploying the Marmarica TV IPTV Management Panel from scratch on a new server.
 
-## 🚀 Quick Start Checklist
+## 🚀 Quick Start (Automated Deployment)
+
+**New! One-command deployment:**
+
+```bash
+# Clone repository
+git clone https://github.com/pokerist/marmaricatv.git
+cd marmaricatv/Marmarica-TV
+
+# Run automated deployment
+chmod +x deploy.sh
+./deploy.sh
+
+# Verify deployment
+chmod +x scripts/verify.sh
+./scripts/verify.sh
+```
+
+**That's it!** The script handles everything automatically:
+- System dependencies installation
+- Environment configuration
+- Database setup
+- Frontend build
+- Service startup
+- Verification tests
+
+## 🚀 Manual Deployment Checklist
+
+If you prefer manual installation:
 
 - [ ] Server meets minimum requirements
 - [ ] Node.js 18+ installed
@@ -12,6 +40,7 @@ This guide provides step-by-step instructions for deploying the Marmarica TV IPT
 - [ ] Environment variables configured
 - [ ] Database initialized and migrated
 - [ ] Admin user created
+- [ ] Frontend built for production
 - [ ] Transcoding directories configured
 - [ ] Application started with PM2
 - [ ] Nginx configured (optional)

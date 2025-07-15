@@ -176,6 +176,27 @@ app.get('/api/health', (req, res) => {
   res.status(200).json({ status: 'OK', message: 'Server is running' });
 });
 
+// Serve React build files in production
+if (NODE_ENV === 'production') {
+  // Serve static files from React build
+  const buildPath = path.join(__dirname, '../client/build');
+  app.use(express.static(buildPath));
+  
+  // Handle client-side routing - serve index.html for non-API routes
+  app.get('*', (req, res) => {
+    // Only serve index.html for non-API routes
+    if (!req.path.startsWith('/api/') && !req.path.startsWith('/uploads/') && !req.path.startsWith('/hls_stream/')) {
+      res.sendFile(path.join(buildPath, 'index.html'));
+    } else {
+      res.status(404).json({ error: 'Not found' });
+    }
+  });
+  
+  console.log(`Frontend served from: ${buildPath}`);
+} else {
+  console.log('Development mode - Frontend should be served separately');
+}
+
 // Function to check for expired devices and update their status
 function checkExpiredDevices() {
   try {
