@@ -1,5 +1,17 @@
 const os = require('os');
-const { db } = require('../index');
+
+// Database reference - will be set when available
+let db = null;
+
+// Function to set database reference
+const setDatabase = (database) => {
+  db = database;
+};
+
+// Function to get database reference safely
+const getDatabase = () => {
+  return db;
+};
 
 // Resource monitoring configuration
 const RESOURCE_CONFIG = {
@@ -285,6 +297,11 @@ class ResourceMonitor {
   // Log alert to database
   async logAlert(alert) {
     try {
+      if (!db) {
+        console.log(`Resource alert (DB not available): ${alert.message}`);
+        return;
+      }
+      
       const now = new Date().toISOString();
       await new Promise((resolve, reject) => {
         db.run(
@@ -309,6 +326,11 @@ class ResourceMonitor {
   // Store historical data
   async storeHistoricalData(stats) {
     try {
+      if (!db) {
+        // Skip storing if database is not available
+        return;
+      }
+      
       await new Promise((resolve, reject) => {
         db.run(
           `INSERT INTO resource_history (
@@ -699,5 +721,7 @@ module.exports = {
   processWatchdog,
   initializeResourceMonitoring,
   cleanupResourceMonitoring,
+  setDatabase,
+  getDatabase,
   RESOURCE_CONFIG
 };

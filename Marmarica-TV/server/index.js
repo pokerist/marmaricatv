@@ -49,6 +49,18 @@ app.use(bodyParser.urlencoded({ extended: true }));
 // Session configuration will be set up after session store initialization
 let sessionStore = null;
 
+// Set up basic session middleware immediately (will be replaced by enhanced version if available)
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'your-secret-key',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    httpOnly: true,
+    secure: false,
+    maxAge: 12 * 60 * 60 * 1000 // 12 hours
+  }
+}));
+
 // Serve uploaded files
 app.use('/uploads', express.static(path.join(__dirname, UPLOAD_DIR)));
 
@@ -343,6 +355,8 @@ async function initializeEnhancedServices() {
     if (enhancedServices.resourceMonitoring) {
       try {
         console.log('Initializing resource monitoring...');
+        // Set database reference
+        enhancedServices.resourceMonitoring.setDatabase(db);
         await enhancedServices.resourceMonitoring.initializeResourceMonitoring();
         console.log('Resource monitoring initialized');
       } catch (error) {
@@ -354,6 +368,8 @@ async function initializeEnhancedServices() {
     if (enhancedServices.enhancedTranscoding) {
       try {
         console.log('Initializing enhanced transcoding...');
+        // Set database reference
+        enhancedServices.enhancedTranscoding.setDatabase(db);
         await enhancedServices.enhancedTranscoding.initializeEnhancedTranscoding();
         console.log('Enhanced transcoding initialized');
       } catch (error) {

@@ -1,7 +1,19 @@
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
-const { db } = require('../index');
+
+// Database reference - will be set when available
+let db = null;
+
+// Function to set database reference
+const setDatabase = (database) => {
+  db = database;
+};
+
+// Function to get database reference safely
+const getDatabase = () => {
+  return db;
+};
 
 // Configuration
 const HLS_OUTPUT_BASE = process.env.HLS_OUTPUT_BASE || '/var/www/html/hls_stream';
@@ -1818,6 +1830,11 @@ module.exports = {
   // Error handling
   detectErrorType,
   attemptFallback,
+  
+  // Database management
+  setDatabase,
+  getDatabase,
+  logAction,
   
   // Constants
   CONCURRENCY_CONFIG,
