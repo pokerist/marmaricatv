@@ -107,11 +107,6 @@ const validateChannelUrl = (url) => {
       return { isValid: false, sanitized: '', error: 'URL domain is blocked' };
     }
 
-    // Check for private IP ranges (basic check)
-    if (hostname.match(/^(10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|192\.168\.)/)) {
-      return { isValid: false, sanitized: '', error: 'Private IP addresses are not allowed' };
-    }
-
     return { isValid: true, sanitized: urlObj.href, error: null };
   } catch (error) {
     return { isValid: false, sanitized: '', error: 'Invalid URL format' };
