@@ -279,6 +279,10 @@ class DatabaseInitializer {
         keyint_min INTEGER DEFAULT 50,
         hls_time INTEGER DEFAULT 4,
         hls_list_size INTEGER DEFAULT 3,
+        hls_segment_type TEXT NOT NULL DEFAULT 'fmp4',
+        hls_flags TEXT NOT NULL DEFAULT 'delete_segments+split_by_time+independent_segments',
+        hls_segment_filename TEXT DEFAULT 'output_%d.m4s',
+        manifest_filename TEXT DEFAULT 'output.m3u8',
         additional_params TEXT,
         is_default BOOLEAN DEFAULT 0,
         created_at TEXT NOT NULL,
@@ -288,6 +292,12 @@ class DatabaseInitializer {
 
     // Add profile_id column to channels table
     await this.addColumn('channels', 'transcoding_profile_id', 'INTEGER REFERENCES transcoding_profiles(id)');
+
+    // Add new HLS/fMP4 schema columns for existing databases
+    await this.addColumn('transcoding_profiles', 'hls_segment_type', 'TEXT NOT NULL DEFAULT \'fmp4\'');
+    await this.addColumn('transcoding_profiles', 'hls_flags', 'TEXT NOT NULL DEFAULT \'delete_segments+split_by_time+independent_segments\'');
+    await this.addColumn('transcoding_profiles', 'hls_segment_filename', 'TEXT DEFAULT \'output_%d.m4s\'');
+    await this.addColumn('transcoding_profiles', 'manifest_filename', 'TEXT DEFAULT \'output.m3u8\'');
 
     // Insert default profiles
     await this.insertDefaultProfiles();
@@ -314,7 +324,11 @@ class DatabaseInitializer {
         keyint_min: 30,
         hls_time: 6,
         hls_list_size: 4,
-        additional_params: '-hls_flags delete_segments+program_date_time+independent_segments+split_by_time -hls_delete_threshold 1',
+        hls_segment_type: 'fmp4',
+        hls_flags: 'delete_segments+split_by_time+independent_segments',
+        hls_segment_filename: 'output_%d.m4s',
+        manifest_filename: 'output.m3u8',
+        additional_params: '-hls_delete_threshold 1',
         is_default: 1
       },
       {
@@ -331,7 +345,11 @@ class DatabaseInitializer {
         keyint_min: 50,
         hls_time: 4,
         hls_list_size: 4,
-        additional_params: '-hls_flags delete_segments+program_date_time+independent_segments+split_by_time -hls_delete_threshold 1',
+        hls_segment_type: 'fmp4',
+        hls_flags: 'delete_segments+split_by_time+independent_segments',
+        hls_segment_filename: 'output_%d.m4s',
+        manifest_filename: 'output.m3u8',
+        additional_params: '-hls_delete_threshold 1',
         is_default: 0
       },
       {
@@ -348,7 +366,11 @@ class DatabaseInitializer {
         keyint_min: 60,
         hls_time: 4,
         hls_list_size: 4,
-        additional_params: '-hls_flags delete_segments+program_date_time+independent_segments+split_by_time -hls_delete_threshold 1',
+        hls_segment_type: 'fmp4',
+        hls_flags: 'delete_segments+split_by_time+independent_segments',
+        hls_segment_filename: 'output_%d.m4s',
+        manifest_filename: 'output.m3u8',
+        additional_params: '-hls_delete_threshold 1',
         is_default: 0
       }
     ];
@@ -364,15 +386,20 @@ class DatabaseInitializer {
         INSERT OR IGNORE INTO transcoding_profiles (
           name, description, video_codec, audio_codec, video_bitrate, audio_bitrate,
           resolution, preset, tune, gop_size, keyint_min, hls_time, hls_list_size,
+          hls_segment_type, hls_flags, hls_segment_filename, manifest_filename,
           additional_params, is_default, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `;
       
       this.db.run(sql, [
         profile.name, profile.description, profile.video_codec, profile.audio_codec,
         profile.video_bitrate, profile.audio_bitrate, profile.resolution, profile.preset,
         profile.tune, profile.gop_size, profile.keyint_min, profile.hls_time,
-        profile.hls_list_size, profile.additional_params, profile.is_default, timestamp, timestamp
+        profile.hls_list_size, profile.hls_segment_type || 'fmp4', 
+        profile.hls_flags || 'delete_segments+split_by_time+independent_segments',
+        profile.hls_segment_filename || 'output_%d.m4s',
+        profile.manifest_filename || 'output.m3u8',
+        profile.additional_params, profile.is_default, timestamp, timestamp
       ], function(err) {
         if (err) {
           log.error(`Failed to insert profile ${profile.name}: ${err.message}`);

@@ -82,6 +82,10 @@ router.post('/', asyncHandler(async (req, res) => {
     keyint_min,
     hls_time,
     hls_list_size,
+    hls_segment_type,
+    hls_flags,
+    hls_segment_filename,
+    manifest_filename,
     additional_params,
     is_default
   } = req.body;
@@ -120,8 +124,9 @@ router.post('/', asyncHandler(async (req, res) => {
         `INSERT INTO transcoding_profiles (
           name, description, video_codec, audio_codec, video_bitrate, audio_bitrate,
           resolution, preset, tune, gop_size, keyint_min, hls_time, hls_list_size,
+          hls_segment_type, hls_flags, hls_segment_filename, manifest_filename,
           additional_params, is_default, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           name,
           description || null,
@@ -136,6 +141,10 @@ router.post('/', asyncHandler(async (req, res) => {
           keyint_min || 50,
           hls_time || 4,
           hls_list_size || 3,
+          hls_segment_type || 'fmp4',
+          hls_flags || 'delete_segments+split_by_time+independent_segments',
+          hls_segment_filename || 'output_%d.m4s',
+          manifest_filename || 'output.m3u8',
           additional_params || null,
           is_default ? 1 : 0,
           now,
@@ -194,6 +203,10 @@ router.put('/:id', asyncHandler(async (req, res) => {
     keyint_min,
     hls_time,
     hls_list_size,
+    hls_segment_type,
+    hls_flags,
+    hls_segment_filename,
+    manifest_filename,
     additional_params,
     is_default
   } = req.body;
@@ -291,6 +304,22 @@ router.put('/:id', asyncHandler(async (req, res) => {
           if (hls_list_size !== undefined) {
             updates.push('hls_list_size = ?');
             params.push(hls_list_size);
+          }
+          if (hls_segment_type !== undefined) {
+            updates.push('hls_segment_type = ?');
+            params.push(hls_segment_type);
+          }
+          if (hls_flags !== undefined) {
+            updates.push('hls_flags = ?');
+            params.push(hls_flags);
+          }
+          if (hls_segment_filename !== undefined) {
+            updates.push('hls_segment_filename = ?');
+            params.push(hls_segment_filename);
+          }
+          if (manifest_filename !== undefined) {
+            updates.push('manifest_filename = ?');
+            params.push(manifest_filename);
           }
           if (additional_params !== undefined) {
             updates.push('additional_params = ?');

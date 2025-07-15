@@ -185,14 +185,19 @@ const ensureMandatoryCleanupFlags = (command) => {
 const generateFFmpegCommand = async (inputUrl, channelId, profileId = null) => {
   try {
     const outputDir = createOutputDirectory(channelId);
-    const outputPath = path.join(outputDir, 'output.m3u8');
-    const segmentPath = path.join(outputDir, 'output_%d.m4s'); // Use %d for proper cleanup
-
+    
     // Get transcoding profile
     const profile = await getTranscodingProfile(profileId);
     console.log(`Using transcoding profile: ${profile.name} (ID: ${profile.id})`);
 
-    // Base command structure
+    // Use profile-defined filenames or fallback to defaults
+    const manifestFilename = profile.manifest_filename || 'output.m3u8';
+    const segmentFilename = profile.hls_segment_filename || 'output_%d.m4s';
+    
+    const outputPath = path.join(outputDir, manifestFilename);
+    const segmentPath = path.join(outputDir, segmentFilename);
+
+    // Base command structure using profile settings
     let command = [
       '-i', inputUrl,
       '-c:v', profile.video_codec,
@@ -205,7 +210,8 @@ const generateFFmpegCommand = async (inputUrl, channelId, profileId = null) => {
       '-f', 'hls',
       '-hls_time', profile.hls_time.toString(),
       '-hls_playlist_type', 'event',
-      '-hls_segment_type', 'mpegts',
+      '-hls_segment_type', profile.hls_segment_type || 'fmp4',
+      '-hls_flags', profile.hls_flags || 'delete_segments+split_by_time+independent_segments',
       '-hls_segment_filename', segmentPath,
       '-hls_start_number_source', 'epoch',
       '-hls_list_size', Math.max(profile.hls_list_size, 4).toString(),
@@ -372,8 +378,9 @@ const startTranscoding = async (channelId, inputUrl, channelName) => {
 
       if (code === 0) {
         // Process completed successfully
+        const manifestFilename = profile.manifest_filename || 'output.m3u8';
         await updateJobStatus(jobId, 'completed');
-        await updateChannelStatus(channelId, 'active', `${SERVER_BASE_URL}/hls_stream/channel_${channelId}/output.m3u8`);
+        await updateChannelStatus(channelId, 'active', `${SERVER_BASE_URL}/hls_stream/channel_${channelId}/${manifestFilename}`);
         logAction('transcoding_completed', `Transcoding completed for channel: ${channelName} using profile: ${profile.name}`);
       } else {
         // Process failed
@@ -398,7 +405,8 @@ const startTranscoding = async (channelId, inputUrl, channelName) => {
     // Give it a moment to start, then update status
     setTimeout(async () => {
       if (activeProcesses.has(channelId)) {
-        await updateChannelStatus(channelId, 'active', `${SERVER_BASE_URL}/hls_stream/channel_${channelId}/output.m3u8`);
+        const manifestFilename = profile.manifest_filename || 'output.m3u8';
+        await updateChannelStatus(channelId, 'active', `${SERVER_BASE_URL}/hls_stream/channel_${channelId}/${manifestFilename}`);
         logAction('transcoding_started', `Transcoding started for channel: ${channelName} using profile: ${profile.name}`);
       }
     }, 2000);
