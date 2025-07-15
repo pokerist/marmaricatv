@@ -141,8 +141,15 @@ install_dependencies() {
     fi
     log "✓ SQLite3 installed"
     
+    # Install Nginx
+    if ! command -v nginx &> /dev/null; then
+        log "Installing Nginx..."
+        sudo apt install -y nginx
+    fi
+    log "✓ Nginx installed"
+    
     # Install additional tools
-    sudo apt install -y curl wget git htop
+    sudo apt install -y curl wget git htop jq
     log "✓ Additional tools installed"
 }
 
@@ -305,6 +312,149 @@ build_frontend() {
     cd "$SCRIPT_DIR"
 }
 
+# Configure Nginx for HLS streaming
+configure_nginx_hls() {
+    log "Configuring Nginx for HLS streaming..."
+    
+    # Create Nginx configuration for HLS
+    sudo tee /etc/nginx/sites-available/marmarica-hls > /dev/null << EOF
+server {
+    listen 80;
+    server_name _;
+    
+    # Root directory
+    root /var/www/html;
+    
+    # HLS streaming configuration
+    location /hls_stream/ {
+        alias /var/www/html/hls_stream/;
+        
+        # CORS headers for HLS streaming
+        add_header Access-Control-Allow-Origin "*" always;
+        add_header Access-Control-Allow-Methods "GET, HEAD, OPTIONS" always;
+        add_header Access-Control-Allow-Headers "Origin, X-Requested-With, Content-Type, Accept, Authorization, Cache-Control" always;
+        add_header Access-Control-Expose-Headers "Content-Length, Content-Range" always;
+        
+        # Handle preflight requests
+        if (\$request_method = 'OPTIONS') {
+            add_header Access-Control-Allow-Origin "*";
+            add_header Access-Control-Allow-Methods "GET, HEAD, OPTIONS";
+            add_header Access-Control-Allow-Headers "Origin, X-Requested-With, Content-Type, Accept, Authorization, Cache-Control";
+            add_header Access-Control-Max-Age 86400;
+            add_header Content-Type "text/plain charset=UTF-8";
+            add_header Content-Length 0;
+            return 204;
+        }
+        
+        # Cache control for HLS files
+        location ~* \.(m3u8)$ {
+            add_header Access-Control-Allow-Origin "*" always;
+            add_header Cache-Control "no-cache, no-store, must-revalidate" always;
+            add_header Pragma "no-cache" always;
+            expires -1;
+        }
+        
+        location ~* \.(ts)$ {
+            add_header Access-Control-Allow-Origin "*" always;
+            add_header Cache-Control "public, max-age=3600" always;
+            expires 1h;
+        }
+        
+        # Security headers
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        
+        # Try to serve request as file
+        try_files \$uri \$uri/ =404;
+        
+        # Enable directory listing for debugging (disable in production)
+        autoindex off;
+    }
+    
+    # Health check endpoint
+    location /hls_health {
+        access_log off;
+        return 200 "HLS Server OK\\n";
+        add_header Content-Type text/plain;
+    }
+    
+    # Deny access to everything else
+    location / {
+        return 404 "Not Found";
+    }
+    
+    # Logging
+    access_log /var/log/nginx/hls_access.log;
+    error_log /var/log/nginx/hls_error.log;
+}
+EOF
+    
+    # Remove default site
+    sudo rm -f /etc/nginx/sites-enabled/default
+    
+    # Enable HLS site
+    sudo ln -sf /etc/nginx/sites-available/marmarica-hls /etc/nginx/sites-enabled/
+    
+    # Test nginx configuration
+    if sudo nginx -t; then
+        log "✓ Nginx configuration test passed"
+    else
+        error "Nginx configuration test failed"
+        exit 1
+    fi
+    
+    # Enable and start nginx
+    sudo systemctl enable nginx
+    sudo systemctl start nginx
+    sudo systemctl reload nginx
+    
+    log "✓ Nginx configured for HLS streaming"
+}
+
+# Setup HLS directory permissions
+setup_hls_permissions() {
+    log "Setting up HLS directory permissions..."
+    
+    # Ensure HLS directory exists
+    sudo mkdir -p /var/www/html/hls_stream
+    
+    # Set proper ownership - both user and www-data need access
+    sudo chown -R $USER:www-data /var/www/html/hls_stream
+    sudo chmod -R 775 /var/www/html/hls_stream
+    
+    # Set default permissions for new files
+    sudo find /var/www/html/hls_stream -type d -exec chmod 775 {} \;
+    sudo find /var/www/html/hls_stream -type f -exec chmod 664 {} \; 2>/dev/null || true
+    
+    log "✓ HLS directory permissions configured"
+}
+
+# Configure firewall for HTTP and Express
+configure_firewall() {
+    log "Configuring firewall..."
+    
+    # Configure UFW if available
+    if command -v ufw &> /dev/null; then
+        sudo ufw allow 22/tcp   # SSH
+        sudo ufw allow 80/tcp   # HTTP (HLS streaming)
+        sudo ufw allow 5000/tcp # Express app
+        
+        # Enable UFW if not already enabled
+        sudo ufw --force enable 2>/dev/null || true
+        
+        log "✓ Firewall configured (UFW)"
+    elif command -v firewall-cmd &> /dev/null; then
+        sudo firewall-cmd --permanent --add-port=22/tcp
+        sudo firewall-cmd --permanent --add-port=80/tcp
+        sudo firewall-cmd --permanent --add-port=5000/tcp
+        sudo firewall-cmd --reload
+        
+        log "✓ Firewall configured (firewalld)"
+    else
+        warning "No firewall detected - manual configuration may be needed"
+    fi
+}
+
 # Start services
 start_services() {
     log "Starting services..."
@@ -347,6 +497,39 @@ run_verification() {
         log "✓ PM2 service online"
     else
         error "PM2 service not online: $pm2_status"
+        return 1
+    fi
+    
+    # Test Nginx service
+    if systemctl is-active --quiet nginx; then
+        log "✓ Nginx service running"
+    else
+        error "Nginx service not running"
+        return 1
+    fi
+    
+    # Test HLS health endpoint
+    local hls_health=$(curl -s "http://localhost/hls_health" || echo "failed")
+    if [[ "$hls_health" == *"OK"* ]]; then
+        log "✓ HLS health endpoint working"
+    else
+        error "HLS health endpoint failed: $hls_health"
+        return 1
+    fi
+    
+    # Test HLS directory access
+    if [[ -d "/var/www/html/hls_stream" ]]; then
+        log "✓ HLS directory exists"
+    else
+        error "HLS directory not found"
+        return 1
+    fi
+    
+    # Test HLS directory permissions
+    if [[ -w "/var/www/html/hls_stream" ]]; then
+        log "✓ HLS directory writable"
+    else
+        error "HLS directory not writable"
         return 1
     fi
     
@@ -403,16 +586,25 @@ print_summary() {
     echo "  Admin Panel:  http://$SERVER_IP:5000/login"
     echo "  API Health:   http://$SERVER_IP:5000/api/health"
     echo
+    echo -e "${YELLOW}HLS Streaming (Port 80):${NC}"
+    echo "  Health Check: http://$SERVER_IP/hls_health"
+    echo "  Stream URL:   http://$SERVER_IP/hls_stream/channel_XX/output.m3u8"
+    echo "  Example:      http://$SERVER_IP/hls_stream/channel_17/output.m3u8"
+    echo "  Directory:    /var/www/html/hls_stream/"
+    echo
     echo -e "${YELLOW}Admin Credentials:${NC}"
     if [[ -f "server/admin-credentials.txt" ]]; then
         cat server/admin-credentials.txt
     fi
     echo
     echo -e "${YELLOW}Service Management:${NC}"
-    echo "  Status:   pm2 status"
-    echo "  Logs:     pm2 logs marmarica-tv-server"
-    echo "  Restart:  pm2 restart marmarica-tv-server"
-    echo "  Stop:     pm2 stop marmarica-tv-server"
+    echo "  PM2 Status:   pm2 status"
+    echo "  PM2 Logs:     pm2 logs marmarica-tv-server"
+    echo "  PM2 Restart:  pm2 restart marmarica-tv-server"
+    echo "  PM2 Stop:     pm2 stop marmarica-tv-server"
+    echo "  Nginx Status: systemctl status nginx"
+    echo "  Nginx Reload: sudo systemctl reload nginx"
+    echo "  Nginx Logs:   sudo tail -f /var/log/nginx/hls_access.log"
     echo
     echo -e "${YELLOW}Files & Directories:${NC}"
     echo "  Database: $SCRIPT_DIR/server/database.sqlite"
@@ -420,12 +612,20 @@ print_summary() {
     echo "  HLS:      /var/www/html/hls_stream/"
     echo "  Logs:     $SCRIPT_DIR/logs/"
     echo "  Backups:  $BACKUP_DIR/"
+    echo "  Nginx Config: /etc/nginx/sites-available/marmarica-hls"
+    echo
+    echo -e "${YELLOW}Testing HLS Streaming:${NC}"
+    echo "  1. Test health: curl http://$SERVER_IP/hls_health"
+    echo "  2. Create test channel with transcoding enabled"
+    echo "  3. Access stream: http://$SERVER_IP/hls_stream/channel_XX/output.m3u8"
+    echo "  4. Check logs: sudo tail -f /var/log/nginx/hls_access.log"
     echo
     echo -e "${YELLOW}Next Steps:${NC}"
     echo "  1. Access the admin panel using the credentials above"
     echo "  2. Configure your channels and devices"
     echo "  3. Set up transcoding profiles if needed"
-    echo "  4. Configure automatic backups"
+    echo "  4. Test HLS streaming with IPTV apps"
+    echo "  5. Configure automatic backups"
     echo
     echo -e "${GREEN}Deployment log saved to: $LOG_FILE${NC}"
     echo
@@ -473,6 +673,9 @@ main() {
     initialize_database
     create_admin_user
     build_frontend
+    configure_nginx_hls
+    setup_hls_permissions
+    configure_firewall
     start_services
     run_verification
     
