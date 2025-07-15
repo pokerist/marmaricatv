@@ -209,6 +209,17 @@ export const transcodingAPI = {
   getTranscodingStats: () => retryRequest(() => api.get('/transcoding/stats')),
 };
 
+// Transcoding Profiles API
+export const transcodingProfilesAPI = {
+  getAllProfiles: () => retryRequest(() => api.get('/transcoding-profiles')),
+  getProfileById: (id) => retryRequest(() => api.get(`/transcoding-profiles/${id}`)),
+  createProfile: (profileData) => retryRequest(() => api.post('/transcoding-profiles', profileData)),
+  updateProfile: (id, profileData) => retryRequest(() => api.put(`/transcoding-profiles/${id}`, profileData)),
+  deleteProfile: (id) => retryRequest(() => api.delete(`/transcoding-profiles/${id}`)),
+  setDefaultProfile: (id) => retryRequest(() => api.post(`/transcoding-profiles/${id}/set-default`)),
+  getProfileUsage: (id) => retryRequest(() => api.get(`/transcoding-profiles/${id}/usage`)),
+};
+
 // Bulk Operations API
 export const bulkOperationsAPI = {
   parseM3U8: (file) => {
@@ -223,12 +234,13 @@ export const bulkOperationsAPI = {
     }));
   },
   importChannels: (validChannels) => retryRequest(() => api.post('/bulk-operations/import-channels', { validChannels })),
-  startBulkTranscoding: (channelIds = null) => retryRequest(() => api.post('/bulk-operations/start-bulk-transcoding', { channelIds })),
+  startBulkTranscoding: (channelIds = null, profileId = null) => retryRequest(() => api.post('/bulk-operations/start-bulk-transcoding', { channelIds, profileId })),
   getBulkOperationStatus: (operationId) => retryRequest(() => api.get(`/bulk-operations/status/${operationId}`)),
   getRecentBulkOperations: (limit = 10) => retryRequest(() => api.get(`/bulk-operations/recent?limit=${limit}`)),
   getImportLogs: (operationId) => retryRequest(() => api.get(`/bulk-operations/import-logs/${operationId}`)),
   getTranscodingEligibleChannels: () => retryRequest(() => api.get('/bulk-operations/transcoding-eligible')),
   getBulkOperationsStats: () => retryRequest(() => api.get('/bulk-operations/stats')),
+  deleteAllChannels: () => retryRequest(() => api.post('/bulk-operations/delete-all-channels')),
 };
 
 // Auth API

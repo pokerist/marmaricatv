@@ -24,6 +24,7 @@ import ChannelsList from './pages/channels/ChannelsList';
 import ChannelForm from './pages/channels/ChannelForm';
 import NewsList from './pages/news/NewsList';
 import NewsForm from './pages/news/NewsForm';
+import TranscodingProfilesList from './pages/transcoding/TranscodingProfilesList';
 import NotFound from './pages/NotFound';
 
 // Create router with future flags enabled
@@ -56,6 +57,9 @@ const router = createBrowserRouter(
         <Route path="news" element={<NewsList />} />
         <Route path="news/new" element={<NewsForm />} />
         <Route path="news/edit/:id" element={<NewsForm />} />
+        
+        {/* Transcoding Profiles */}
+        <Route path="transcoding-profiles" element={<TranscodingProfilesList />} />
         
         {/* Not Found */}
         <Route path="404" element={<NotFound />} />

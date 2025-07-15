@@ -150,6 +150,7 @@ const dashboardRoutes = require('./routes/dashboard');
 const clientRoutes = require('./routes/client');
 const authRoutes = require('./routes/auth');
 const transcodingRoutes = require('./routes/transcoding');
+const transcodingProfilesRoutes = require('./routes/transcoding-profiles');
 const bulkOperationsRoutes = require('./routes/bulk-operations');
 
 // Initialize auth table
@@ -166,6 +167,7 @@ app.use('/api/channels', isAuthenticated, channelRoutes);
 app.use('/api/news', isAuthenticated, newsRoutes);
 app.use('/api/dashboard', isAuthenticated, dashboardRoutes);
 app.use('/api/transcoding', isAuthenticated, transcodingRoutes);
+app.use('/api/transcoding-profiles', isAuthenticated, transcodingProfilesRoutes);
 app.use('/api/bulk-operations', isAuthenticated, bulkOperationsRoutes);
 app.use('/api/client', clientRoutes); // Client routes remain open
 

@@ -1,20 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import { Modal, Button, Form, Alert, Table, Badge, ProgressBar, Spinner } from 'react-bootstrap';
 import { FaPlay, FaCheck, FaTimes } from 'react-icons/fa';
-import { bulkOperationsAPI } from '../services/api';
+import { bulkOperationsAPI, transcodingProfilesAPI } from '../services/api';
 import { toast } from 'react-toastify';
 
 const BulkTranscodingModal = ({ show, onHide, onTranscodingSuccess }) => {
   const [eligibleChannels, setEligibleChannels] = useState([]);
   const [selectedChannels, setSelectedChannels] = useState([]);
+  const [profiles, setProfiles] = useState([]);
+  const [selectedProfile, setSelectedProfile] = useState('');
   const [loading, setLoading] = useState(false);
   const [transcoding, setTranscoding] = useState(false);
   const [transcodingProgress, setTranscodingProgress] = useState(null);
 
-  // Load eligible channels when modal opens
+  // Load eligible channels and profiles when modal opens
   useEffect(() => {
     if (show) {
       loadEligibleChannels();
+      loadProfiles();
     }
   }, [show]);
 
@@ -35,6 +38,23 @@ const BulkTranscodingModal = ({ show, onHide, onTranscodingSuccess }) => {
       toast.error('Error loading channels');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Load transcoding profiles
+  const loadProfiles = async () => {
+    try {
+      const response = await transcodingProfilesAPI.getAllProfiles();
+      setProfiles(response.data.data);
+      
+      // Set default profile as selected
+      const defaultProfile = response.data.data.find(p => p.is_default);
+      if (defaultProfile) {
+        setSelectedProfile(defaultProfile.id.toString());
+      }
+    } catch (error) {
+      console.error('Error loading profiles:', error);
+      toast.error('Failed to load transcoding profiles');
     }
   };
 
@@ -72,11 +92,16 @@ const BulkTranscodingModal = ({ show, onHide, onTranscodingSuccess }) => {
       return;
     }
 
+    if (!selectedProfile) {
+      toast.error('Please select a transcoding profile');
+      return;
+    }
+
     try {
       setTranscoding(true);
       setTranscodingProgress({ current: 0, total: selectedChannels.length });
 
-      const response = await bulkOperationsAPI.startBulkTranscoding(selectedChannels);
+      const response = await bulkOperationsAPI.startBulkTranscoding(selectedChannels, selectedProfile);
       
       if (response.data.success) {
         const results = response.data.data;
@@ -107,11 +132,16 @@ const BulkTranscodingModal = ({ show, onHide, onTranscodingSuccess }) => {
       return;
     }
 
+    if (!selectedProfile) {
+      toast.error('Please select a transcoding profile');
+      return;
+    }
+
     try {
       setTranscoding(true);
       setTranscodingProgress({ current: 0, total: eligibleChannels.length });
 
-      const response = await bulkOperationsAPI.startBulkTranscoding();
+      const response = await bulkOperationsAPI.startBulkTranscoding(null, selectedProfile);
       
       if (response.data.success) {
         const results = response.data.data;
@@ -192,6 +222,27 @@ const BulkTranscodingModal = ({ show, onHide, onTranscodingSuccess }) => {
                   Select channels to enable transcoding for multiple channels at once. 
                   This will convert MPEG-TS streams to HLS format for better web compatibility.
                 </Alert>
+
+                {/* Profile Selection */}
+                <div className="mb-3">
+                  <Form.Label>Transcoding Profile</Form.Label>
+                  <Form.Select
+                    value={selectedProfile}
+                    onChange={(e) => setSelectedProfile(e.target.value)}
+                  >
+                    <option value="">Select a profile...</option>
+                    {profiles.map(profile => (
+                      <option key={profile.id} value={profile.id}>
+                        {profile.name}
+                        {profile.is_default && ' (Default)'}
+                        {profile.description && ` - ${profile.description}`}
+                      </option>
+                    ))}
+                  </Form.Select>
+                  <Form.Text className="text-muted">
+                    The selected profile will be applied to all channels during transcoding.
+                  </Form.Text>
+                </div>
 
                 <div className="mb-3">
                   <Form.Check

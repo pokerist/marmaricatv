@@ -9,6 +9,7 @@ import { channelsAPI, transcodingAPI } from '../../services/api';
 import { toast } from 'react-toastify';
 import M3U8Upload from '../../components/M3U8Upload';
 import BulkTranscodingModal from '../../components/BulkTranscodingModal';
+import DeleteAllChannelsModal from '../../components/DeleteAllChannelsModal';
 
 const ChannelsList = () => {
   const [channels, setChannels] = useState([]);
@@ -22,6 +23,9 @@ const ChannelsList = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [showM3U8Upload, setShowM3U8Upload] = useState(false);
   const [showBulkTranscoding, setShowBulkTranscoding] = useState(false);
+  const [showDeleteAllChannels, setShowDeleteAllChannels] = useState(false);
+  const [transcodingActions, setTranscodingActions] = useState(new Set());
+  const [pollingInterval, setPollingInterval] = useState(null);
 
   // Handle M3U8 import success
   const handleImportSuccess = (results) => {
@@ -30,6 +34,11 @@ const ChannelsList = () => {
 
   // Handle bulk transcoding success
   const handleTranscodingSuccess = (results) => {
+    fetchChannels(); // Refresh the channel list
+  };
+
+  // Handle delete all channels success
+  const handleDeleteAllSuccess = (results) => {
     fetchChannels(); // Refresh the channel list
   };
 
@@ -140,6 +149,37 @@ const ChannelsList = () => {
     fetchChannels();
   }, [fetchChannels]);
 
+  // Start polling for transcoding status updates when there are active transcoding operations
+  useEffect(() => {
+    const hasActiveTranscoding = channels.some(channel => 
+      channel.transcoding_enabled && 
+      ['starting', 'stopping', 'running'].includes(channel.transcoding_status)
+    );
+
+    if (hasActiveTranscoding && !pollingInterval) {
+      const interval = setInterval(fetchChannels, 3000); // Poll every 3 seconds
+      setPollingInterval(interval);
+    } else if (!hasActiveTranscoding && pollingInterval) {
+      clearInterval(pollingInterval);
+      setPollingInterval(null);
+    }
+
+    return () => {
+      if (pollingInterval) {
+        clearInterval(pollingInterval);
+      }
+    };
+  }, [channels, pollingInterval, fetchChannels]);
+
+  // Clean up polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollingInterval) {
+        clearInterval(pollingInterval);
+      }
+    };
+  }, [pollingInterval]);
+
   // Handle filter changes
   const handleFilterChange = (key, value) => {
     setFilters(prevFilters => ({
@@ -174,25 +214,75 @@ const ChannelsList = () => {
 
   // Handle transcoding toggle
   const handleToggleTranscoding = async (channelId, enabled) => {
+    // Add to tracking set for UI feedback
+    setTranscodingActions(prev => new Set(prev).add(channelId));
+    
     try {
+      // Update channel state optimistically
+      setChannels(prevChannels => 
+        prevChannels.map(channel => 
+          channel.id === channelId 
+            ? { 
+                ...channel, 
+                transcoding_enabled: enabled,
+                transcoding_status: enabled ? 'starting' : 'stopping'
+              }
+            : channel
+        )
+      );
+
       await transcodingAPI.toggleTranscoding(channelId, enabled);
       toast.success(`Transcoding ${enabled ? 'enabled' : 'disabled'} successfully`);
-      fetchChannels(); // Refresh to show updated status
+      
+      // Refresh to get actual status
+      setTimeout(fetchChannels, 1000);
     } catch (error) {
       console.error('Error toggling transcoding:', error);
       toast.error('Failed to toggle transcoding');
+      // Revert optimistic update on error
+      fetchChannels();
+    } finally {
+      // Remove from tracking set
+      setTranscodingActions(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(channelId);
+        return newSet;
+      });
     }
   };
 
   // Handle transcoding restart
   const handleRestartTranscoding = async (channelId) => {
+    // Add to tracking set for UI feedback
+    setTranscodingActions(prev => new Set(prev).add(channelId));
+    
     try {
+      // Update channel state optimistically
+      setChannels(prevChannels => 
+        prevChannels.map(channel => 
+          channel.id === channelId 
+            ? { ...channel, transcoding_status: 'starting' }
+            : channel
+        )
+      );
+
       await transcodingAPI.restartTranscoding(channelId);
       toast.success('Transcoding restarted successfully');
-      fetchChannels(); // Refresh to show updated status
+      
+      // Refresh to get actual status
+      setTimeout(fetchChannels, 1000);
     } catch (error) {
       console.error('Error restarting transcoding:', error);
       toast.error('Failed to restart transcoding');
+      // Revert optimistic update on error
+      fetchChannels();
+    } finally {
+      // Remove from tracking set
+      setTranscodingActions(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(channelId);
+        return newSet;
+      });
     }
   };
 
@@ -546,17 +636,110 @@ const ChannelsList = () => {
         </Card.Body>
       </Card>
       
-      {/* Debug info - only for development */}
-      {process.env.NODE_ENV === 'development' && (
-        <Card className="mt-4">
-          <Card.Header>Debug Information</Card.Header>
-          <Card.Body>
-            <p>Total channels: {channels.length}</p>
-            <p>Filtered channels: {filteredChannels.length}</p>
-            <p>Filters: {JSON.stringify(filters)}</p>
-          </Card.Body>
-        </Card>
-      )}
+      {/* Channel Summary */}
+      <Card className="mt-4">
+        <Card.Header className="bg-light">
+          <h5 className="mb-0">📊 Channel Summary</h5>
+        </Card.Header>
+        <Card.Body>
+          <Row>
+            <Col md={3}>
+              <div className="text-center p-3 border rounded">
+                <h4 className="text-primary mb-1">{channels.length}</h4>
+                <small className="text-muted">Total Channels</small>
+              </div>
+            </Col>
+            <Col md={3}>
+              <div className="text-center p-3 border rounded">
+                <h4 className="text-success mb-1">{filteredChannels.length}</h4>
+                <small className="text-muted">After Filters</small>
+              </div>
+            </Col>
+            <Col md={3}>
+              <div className="text-center p-3 border rounded">
+                <h4 className="text-info mb-1">
+                  {channels.filter(c => c.transcoding_enabled).length}
+                </h4>
+                <small className="text-muted">Transcoding Enabled</small>
+              </div>
+            </Col>
+            <Col md={3}>
+              <div className="text-center p-3 border rounded">
+                <h4 className="text-warning mb-1">
+                  {channels.filter(c => c.transcoding_status === 'active').length}
+                </h4>
+                <small className="text-muted">Active Transcoding</small>
+              </div>
+            </Col>
+          </Row>
+          
+          <hr className="my-4" />
+          
+          <Row>
+            <Col md={6}>
+              <h6 className="mb-3">📺 Channels by Type</h6>
+              <div className="d-flex flex-wrap gap-2">
+                {['FTA', 'BeIN', 'Local'].map(type => {
+                  const count = channels.filter(c => c.type === type).length;
+                  return (
+                    <Badge key={type} bg={type === 'FTA' ? 'primary' : type === 'BeIN' ? 'warning' : 'success'} className="p-2">
+                      {type}: {count}
+                    </Badge>
+                  );
+                })}
+              </div>
+            </Col>
+            <Col md={6}>
+              <h6 className="mb-3">📂 Channels by Category</h6>
+              <div className="d-flex flex-wrap gap-1">
+                {categories.map(category => {
+                  const count = channels.filter(c => c.category === category).length;
+                  return count > 0 ? (
+                    <Badge key={category} bg="secondary" className="p-1">
+                      {category}: {count}
+                    </Badge>
+                  ) : null;
+                })}
+              </div>
+            </Col>
+          </Row>
+          
+          {hasActiveFilters && (
+            <>
+              <hr className="my-4" />
+              <div className="alert alert-info mb-0">
+                <h6 className="mb-2">🔍 Current Filters:</h6>
+                <ul className="mb-0">
+                  {filters.type && <li>Type: <strong>{filters.type}</strong></li>}
+                  {filters.category && <li>Category: <strong>{filters.category}</strong></li>}
+                  {filters.has_news && <li>Has News: <strong>{filters.has_news === 'true' ? 'Yes' : 'No'}</strong></li>}
+                  {searchTerm && <li>Search: <strong>"{searchTerm}"</strong></li>}
+                </ul>
+              </div>
+            </>
+          )}
+          
+          {channels.length > 0 && (
+            <>
+              <hr className="my-4" />
+              <div className="text-center">
+                <Button 
+                  variant="danger" 
+                  size="sm"
+                  onClick={() => setShowDeleteAllChannels(true)}
+                  className="px-4"
+                >
+                  <FaTrash className="me-2" />
+                  Delete All Channels ({channels.length})
+                </Button>
+                <div className="text-muted small mt-2">
+                  ⚠️ This will permanently delete all channels and stop active transcoding
+                </div>
+              </div>
+            </>
+          )}
+        </Card.Body>
+      </Card>
       
       {/* M3U8 Upload Modal */}
       <M3U8Upload 
@@ -570,6 +753,14 @@ const ChannelsList = () => {
         show={showBulkTranscoding}
         onHide={() => setShowBulkTranscoding(false)}
         onTranscodingSuccess={handleTranscodingSuccess}
+      />
+      
+      {/* Delete All Channels Modal */}
+      <DeleteAllChannelsModal 
+        show={showDeleteAllChannels}
+        onHide={() => setShowDeleteAllChannels(false)}
+        onDeleteSuccess={handleDeleteAllSuccess}
+        totalChannels={channels.length}
       />
     </Container>
   );

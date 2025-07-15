@@ -5,6 +5,7 @@ const { db } = require('../index');
 const { parseM3U8Buffer, generateImportPreview } = require('../services/m3u8-parser');
 const { performBulkImport, performBulkTranscoding, getBulkOperationStatus, getRecentBulkOperations } = require('../services/bulk-transcoding');
 const { M3U8_CONSTRAINTS } = require('../services/input-validator');
+const transcodingService = require('../services/transcoding');
 
 // Configure multer for M3U8 file uploads
 const storage = multer.memoryStorage(); // Store in memory for processing
@@ -388,6 +389,155 @@ const getBulkOperationsStats = asyncHandler(async (req, res) => {
   }
 });
 
+/**
+ * Safely delete all channels
+ */
+const deleteAllChannels = asyncHandler(async (req, res) => {
+  try {
+    // Get all channels first to check if any exist
+    const channels = await new Promise((resolve, reject) => {
+      db.all('SELECT id, name, transcoding_enabled, transcoding_status FROM channels', (err, rows) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(rows);
+        }
+      });
+    });
+
+    if (channels.length === 0) {
+      return res.json({
+        success: true,
+        data: {
+          message: 'No channels to delete',
+          stopped: 0,
+          deleted: 0,
+          errors: []
+        }
+      });
+    }
+
+    const results = {
+      stopped: 0,
+      deleted: 0,
+      errors: []
+    };
+
+    // Step 1: Stop all active transcoding processes
+    const activeTranscodingChannels = channels.filter(c => 
+      c.transcoding_enabled && 
+      ['active', 'starting', 'running'].includes(c.transcoding_status)
+    );
+
+    for (const channel of activeTranscodingChannels) {
+      try {
+        await transcodingService.stopTranscoding(channel.id, channel.name);
+        results.stopped++;
+      } catch (error) {
+        console.error(`Error stopping transcoding for channel ${channel.id}:`, error);
+        results.errors.push(`Failed to stop transcoding for channel: ${channel.name}`);
+        // Continue with other channels
+      }
+    }
+
+    // Step 2: Clean up transcoded files and directories
+    const HLS_OUTPUT_BASE = process.env.HLS_OUTPUT_BASE || '/var/www/html/hls_stream';
+    if (fs.existsSync(HLS_OUTPUT_BASE)) {
+      try {
+        const dirs = fs.readdirSync(HLS_OUTPUT_BASE);
+        const channelDirs = dirs.filter(dir => dir.startsWith('channel_'));
+        
+        for (const dir of channelDirs) {
+          const dirPath = path.join(HLS_OUTPUT_BASE, dir);
+          try {
+            fs.rmSync(dirPath, { recursive: true, force: true });
+          } catch (error) {
+            console.error(`Error removing directory ${dir}:`, error);
+            results.errors.push(`Failed to clean up directory: ${dir}`);
+          }
+        }
+      } catch (error) {
+        console.error('Error cleaning up HLS directories:', error);
+        results.errors.push('Failed to clean up some transcoded files');
+      }
+    }
+
+    // Step 3: Clean up uploaded logo files
+    const uploadsDir = path.join(__dirname, '../uploads');
+    if (fs.existsSync(uploadsDir)) {
+      try {
+        const files = fs.readdirSync(uploadsDir);
+        const channelFiles = files.filter(file => file.startsWith('channel-'));
+        
+        for (const file of channelFiles) {
+          const filePath = path.join(uploadsDir, file);
+          try {
+            fs.unlinkSync(filePath);
+          } catch (error) {
+            console.error(`Error removing file ${file}:`, error);
+            // Don't add to errors array for individual files
+          }
+        }
+      } catch (error) {
+        console.error('Error cleaning up upload files:', error);
+        results.errors.push('Failed to clean up some uploaded files');
+      }
+    }
+
+    // Step 4: Delete database entries
+    await new Promise((resolve, reject) => {
+      db.run('DELETE FROM channels', function(err) {
+        if (err) {
+          reject(err);
+        } else {
+          results.deleted = this.changes;
+          resolve();
+        }
+      });
+    });
+
+    // Step 5: Clean up related database entries
+    await new Promise((resolve, reject) => {
+      db.run('DELETE FROM transcoding_jobs', (err) => {
+        if (err) {
+          console.error('Error cleaning up transcoding jobs:', err);
+          results.errors.push('Failed to clean up transcoding jobs');
+        }
+        resolve();
+      });
+    });
+
+    // Log the action
+    const now = new Date().toISOString();
+    db.run(
+      'INSERT INTO actions (action_type, description, created_at) VALUES (?, ?, ?)',
+      ['bulk_delete_channels', `Deleted all channels (${results.deleted} channels, ${results.stopped} stopped transcoding)`, now],
+      (err) => {
+        if (err) {
+          console.error('Error logging bulk delete action:', err.message);
+        }
+      }
+    );
+
+    res.json({
+      success: true,
+      data: {
+        message: `Successfully deleted ${results.deleted} channels`,
+        stopped: results.stopped,
+        deleted: results.deleted,
+        errors: results.errors
+      }
+    });
+
+  } catch (error) {
+    console.error('Error in bulk delete operation:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error while deleting channels'
+    });
+  }
+});
+
 module.exports = {
   parseM3U8,
   importChannels,
@@ -396,5 +546,6 @@ module.exports = {
   getRecentBulkOperations: getRecentBulkOperationsController,
   getImportLogs,
   getTranscodingEligibleChannels,
-  getBulkOperationsStats
+  getBulkOperationsStats,
+  deleteAllChannels
 };

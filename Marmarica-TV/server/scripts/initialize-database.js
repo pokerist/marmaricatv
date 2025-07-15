@@ -55,6 +55,9 @@ class DatabaseInitializer {
       // Add bulk operations support
       await this.addBulkOperationsSupport();
       
+      // Add transcoding profiles support
+      await this.addTranscodingProfiles();
+      
       // Create directories
       await this.createDirectories();
       
@@ -256,6 +259,174 @@ class DatabaseInitializer {
     await this.createIndex('idx_import_logs_status', 'import_logs', 'status');
   }
 
+  async addTranscodingProfiles() {
+    log.section('🎛️ Transcoding Profiles');
+    
+    // Create transcoding_profiles table
+    await this.createTable('transcoding_profiles', `
+      CREATE TABLE IF NOT EXISTS transcoding_profiles (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        description TEXT,
+        video_codec TEXT NOT NULL DEFAULT 'libx264',
+        audio_codec TEXT NOT NULL DEFAULT 'aac',
+        video_bitrate TEXT DEFAULT '2000k',
+        audio_bitrate TEXT DEFAULT '128k',
+        resolution TEXT DEFAULT 'original',
+        preset TEXT NOT NULL DEFAULT 'veryfast',
+        tune TEXT DEFAULT 'zerolatency',
+        gop_size INTEGER DEFAULT 50,
+        keyint_min INTEGER DEFAULT 50,
+        hls_time INTEGER DEFAULT 4,
+        hls_list_size INTEGER DEFAULT 3,
+        additional_params TEXT,
+        is_default BOOLEAN DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    `);
+
+    // Add profile_id column to channels table
+    await this.addColumn('channels', 'transcoding_profile_id', 'INTEGER REFERENCES transcoding_profiles(id)');
+
+    // Insert default profiles
+    await this.insertDefaultProfiles();
+
+    // Update existing channels with default profile
+    await this.updateChannelsWithDefaultProfile();
+  }
+
+  async insertDefaultProfiles() {
+    const now = new Date().toISOString();
+    
+    const defaultProfiles = [
+      {
+        name: 'Fast (Low Quality)',
+        description: 'Fast transcoding with lower quality, suitable for testing',
+        video_codec: 'libx264',
+        audio_codec: 'aac',
+        video_bitrate: '800k',
+        audio_bitrate: '96k',
+        resolution: '720p',
+        preset: 'ultrafast',
+        tune: 'zerolatency',
+        gop_size: 30,
+        keyint_min: 30,
+        hls_time: 6,
+        hls_list_size: 3,
+        is_default: 1
+      },
+      {
+        name: 'Balanced',
+        description: 'Balanced quality and speed, recommended for most use cases',
+        video_codec: 'libx264',
+        audio_codec: 'aac',
+        video_bitrate: '2000k',
+        audio_bitrate: '128k',
+        resolution: '1080p',
+        preset: 'veryfast',
+        tune: 'zerolatency',
+        gop_size: 50,
+        keyint_min: 50,
+        hls_time: 4,
+        hls_list_size: 3,
+        is_default: 0
+      },
+      {
+        name: 'High Quality',
+        description: 'High quality transcoding with slower processing',
+        video_codec: 'libx264',
+        audio_codec: 'aac',
+        video_bitrate: '4000k',
+        audio_bitrate: '192k',
+        resolution: '1080p',
+        preset: 'fast',
+        tune: 'film',
+        gop_size: 60,
+        keyint_min: 60,
+        hls_time: 4,
+        hls_list_size: 4,
+        is_default: 0
+      }
+    ];
+
+    for (const profile of defaultProfiles) {
+      await this.insertProfile(profile, now);
+    }
+  }
+
+  async insertProfile(profile, timestamp) {
+    return new Promise((resolve, reject) => {
+      const sql = `
+        INSERT OR IGNORE INTO transcoding_profiles (
+          name, description, video_codec, audio_codec, video_bitrate, audio_bitrate,
+          resolution, preset, tune, gop_size, keyint_min, hls_time, hls_list_size,
+          is_default, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `;
+      
+      this.db.run(sql, [
+        profile.name, profile.description, profile.video_codec, profile.audio_codec,
+        profile.video_bitrate, profile.audio_bitrate, profile.resolution, profile.preset,
+        profile.tune, profile.gop_size, profile.keyint_min, profile.hls_time,
+        profile.hls_list_size, profile.is_default, timestamp, timestamp
+      ], function(err) {
+        if (err) {
+          log.error(`Failed to insert profile ${profile.name}: ${err.message}`);
+          reject(err);
+        } else {
+          if (this.changes > 0) {
+            log.success(`Inserted default profile: ${profile.name}`);
+          } else {
+            log.warning(`Profile ${profile.name} already exists`);
+          }
+          resolve();
+        }
+      });
+    });
+  }
+
+  async updateChannelsWithDefaultProfile() {
+    return new Promise((resolve, reject) => {
+      // First get the default profile ID
+      this.db.get('SELECT id FROM transcoding_profiles WHERE is_default = 1', (err, row) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        
+        if (!row) {
+          log.warning('No default profile found, skipping channel updates');
+          resolve();
+          return;
+        }
+        
+        const defaultProfileId = row.id;
+        
+        // Update channels that don't have a profile assigned
+        const sql = `
+          UPDATE channels 
+          SET transcoding_profile_id = ? 
+          WHERE transcoding_enabled = 1 AND transcoding_profile_id IS NULL
+        `;
+        
+        this.db.run(sql, [defaultProfileId], function(err) {
+          if (err) {
+            log.error(`Failed to update channels with default profile: ${err.message}`);
+            reject(err);
+          } else {
+            if (this.changes > 0) {
+              log.success(`Updated ${this.changes} channels with default profile`);
+            } else {
+              log.info('No channels needed profile assignment');
+            }
+            resolve();
+          }
+        });
+      });
+    });
+  }
+
   async createDirectories() {
     log.section('📁 Directory Setup');
     
@@ -287,7 +458,7 @@ class DatabaseInitializer {
     // Verify all required tables exist
     const requiredTables = [
       'devices', 'channels', 'news', 'actions', 'admins',
-      'transcoding_jobs', 'bulk_operations', 'import_logs'
+      'transcoding_jobs', 'bulk_operations', 'import_logs', 'transcoding_profiles'
     ];
     
     for (const table of requiredTables) {
@@ -300,6 +471,7 @@ class DatabaseInitializer {
     await this.verifyColumn('channels', 'transcoding_status');
     await this.verifyColumn('channels', 'order_index');
     await this.verifyColumn('channels', 'last_transcoding_state');
+    await this.verifyColumn('channels', 'transcoding_profile_id');
     
     log.success('Database schema verification completed');
   }

@@ -67,4 +67,11 @@ router.get('/transcoding-eligible', getTranscodingEligibleChannels);
  */
 router.get('/stats', getBulkOperationsStats);
 
+/**
+ * @route POST /api/bulk-operations/delete-all-channels
+ * @description Safely delete all channels (stop transcoding first)
+ * @access Private (requires authentication)
+ */
+router.post('/delete-all-channels', require('../controllers/bulk-operations').deleteAllChannels);
+
 module.exports = router;

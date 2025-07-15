@@ -8,7 +8,8 @@ const M3U8_CONSTRAINTS = {
   MAX_URL_LENGTH: 2048,
   ALLOWED_PROTOCOLS: ['http:', 'https:', 'udp:'],
   BLOCKED_DOMAINS: ['localhost', '127.0.0.1', '0.0.0.0', 'local'],
-  BLOCKED_EXTENSIONS: ['.exe', '.bat', '.sh', '.cmd', '.com', '.scr', '.pif'],
+  ALLOWED_EXTENSIONS: ['.m3u8', '.ts', '.mp4', '.flv', '.m4s', '.mkv', '.avi', '.mov', '.webm'],
+  BLOCKED_EXTENSIONS: ['.exe', '.bat', '.sh', '.cmd', '.com', '.scr', '.pif', '.php', '.html', '.htm', '.js', '.css'],
   ALLOWED_CATEGORIES: [
     'Religious', 'News', 'Movies', 'Family', 'Sports',
     'Entertainment', 'Kids', 'Documentary', 'Music', 'General'
@@ -61,7 +62,7 @@ const validateChannelUrl = (url) => {
     return { isValid: false, sanitized: '', error: 'URL is too long' };
   }
 
-  // Check for blocked extensions
+  // Check for blocked extensions first
   const hasBlockedExtension = M3U8_CONSTRAINTS.BLOCKED_EXTENSIONS.some(ext => 
     sanitized.toLowerCase().includes(ext)
   );
@@ -71,6 +72,22 @@ const validateChannelUrl = (url) => {
 
   try {
     const urlObj = new URL(sanitized);
+    
+    // Check if URL has an allowed extension (for streaming URLs)
+    const pathname = urlObj.pathname.toLowerCase();
+    const hasAllowedExtension = M3U8_CONSTRAINTS.ALLOWED_EXTENSIONS.some(ext => 
+      pathname.endsWith(ext)
+    );
+    
+    // Only require allowed extensions for URLs that look like direct file links
+    // Allow URLs without extensions (like API endpoints) to pass through
+    if (pathname.includes('.') && !hasAllowedExtension) {
+      return { 
+        isValid: false, 
+        sanitized: '', 
+        error: `URL must have a valid streaming extension. Allowed: ${M3U8_CONSTRAINTS.ALLOWED_EXTENSIONS.join(', ')}` 
+      };
+    }
     
     // Check protocol
     if (!M3U8_CONSTRAINTS.ALLOWED_PROTOCOLS.includes(urlObj.protocol)) {

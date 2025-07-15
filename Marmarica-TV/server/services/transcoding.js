@@ -620,6 +620,154 @@ const performStartupCleanup = async () => {
   }
 };
 
+// Clean up stale transcoding jobs from database
+const cleanupStaleTranscodingJobs = async () => {
+  console.log('Cleaning up stale transcoding jobs...');
+  
+  try {
+    // Get all running/starting jobs
+    const staleJobs = await new Promise((resolve, reject) => {
+      db.all(
+        'SELECT * FROM transcoding_jobs WHERE status IN (?, ?)',
+        ['starting', 'running'],
+        (err, rows) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(rows);
+          }
+        }
+      );
+    });
+
+    if (staleJobs.length > 0) {
+      console.log(`Found ${staleJobs.length} stale transcoding jobs`);
+      
+      // Mark them as failed
+      await new Promise((resolve, reject) => {
+        db.run(
+          `UPDATE transcoding_jobs SET status = 'failed', error_message = 'Server restart cleanup', updated_at = ? 
+           WHERE status IN ('starting', 'running')`,
+          [new Date().toISOString()],
+          (err) => {
+            if (err) {
+              reject(err);
+            } else {
+              console.log('Marked stale transcoding jobs as failed');
+              resolve();
+            }
+          }
+        );
+      });
+    }
+
+    // Clean up very old completed/failed jobs (older than 7 days)
+    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    await new Promise((resolve, reject) => {
+      db.run(
+        'DELETE FROM transcoding_jobs WHERE status IN (?, ?, ?) AND updated_at < ?',
+        ['completed', 'failed', 'stopped', weekAgo],
+        function(err) {
+          if (err) {
+            reject(err);
+          } else {
+            if (this.changes > 0) {
+              console.log(`Cleaned up ${this.changes} old transcoding job records`);
+            }
+            resolve();
+          }
+        }
+      );
+    });
+
+  } catch (error) {
+    console.error('Error cleaning up stale transcoding jobs:', error);
+  }
+};
+
+// Clean up partial or leftover transcoded files
+const cleanupPartialTranscodedFiles = async () => {
+  console.log('Cleaning up partial transcoded files...');
+  
+  if (!fs.existsSync(HLS_OUTPUT_BASE)) {
+    return;
+  }
+
+  try {
+    const dirs = fs.readdirSync(HLS_OUTPUT_BASE);
+    let cleanedFiles = 0;
+    let cleanedDirs = 0;
+    let freedSpace = 0;
+
+    for (const dir of dirs) {
+      if (!dir.startsWith('channel_')) continue;
+
+      const channelId = parseInt(dir.replace('channel_', ''));
+      const dirPath = path.join(HLS_OUTPUT_BASE, dir);
+
+      // Check if this channel should have active transcoding
+      const shouldBeActive = await new Promise((resolve, reject) => {
+        db.get(
+          'SELECT transcoding_enabled, last_transcoding_state FROM channels WHERE id = ?',
+          [channelId],
+          (err, row) => {
+            if (err) {
+              reject(err);
+            } else {
+              resolve(row && row.transcoding_enabled && row.last_transcoding_state === 'active');
+            }
+          }
+        );
+      });
+
+      if (!shouldBeActive) {
+        // Clean up directory for channels that shouldn't be transcoding
+        try {
+          const dirSize = getDirectorySize(dirPath);
+          fs.rmSync(dirPath, { recursive: true, force: true });
+          cleanedDirs++;
+          freedSpace += dirSize;
+          console.log(`Cleaned up inactive transcoding directory: ${dir}`);
+        } catch (error) {
+          console.error(`Error cleaning up directory ${dir}:`, error);
+        }
+      } else {
+        // For active channels, clean up partial files
+        try {
+          const files = fs.readdirSync(dirPath);
+          
+          for (const file of files) {
+            const filePath = path.join(dirPath, file);
+            const stats = fs.statSync(filePath);
+            
+            // Remove files that are likely partial (very small or very old)
+            if (stats.size < 1024 || getFileAge(filePath) > 60 * 60 * 1000) { // 1KB or 1 hour old
+              try {
+                fs.unlinkSync(filePath);
+                cleanedFiles++;
+                freedSpace += stats.size;
+              } catch (error) {
+                console.error(`Error removing partial file ${filePath}:`, error);
+              }
+            }
+          }
+        } catch (error) {
+          console.error(`Error processing directory ${dir}:`, error);
+        }
+      }
+    }
+
+    if (cleanedFiles > 0 || cleanedDirs > 0) {
+      const message = `Cleaned up ${cleanedFiles} partial files and ${cleanedDirs} directories, freed ${Math.round(freedSpace / 1024 / 1024)}MB`;
+      console.log(message);
+      logAction('startup_partial_cleanup', message);
+    }
+
+  } catch (error) {
+    console.error('Error during partial file cleanup:', error);
+  }
+};
+
 // Get storage statistics
 const getStorageStats = () => {
   if (!fs.existsSync(HLS_OUTPUT_BASE)) {
@@ -676,12 +824,18 @@ const initializeTranscoding = async () => {
       console.log(`Created HLS output base directory: ${HLS_OUTPUT_BASE}`);
     }
 
+    // Clean up any stale transcoding jobs first
+    await cleanupStaleTranscodingJobs();
+
     // Perform startup cleanup with error handling
     try {
       await performStartupCleanup();
     } catch (error) {
       console.error('Startup cleanup failed, but continuing initialization:', error);
     }
+
+    // Enhanced cleanup of partial/leftover transcoded files
+    await cleanupPartialTranscodedFiles();
 
     // Start cleanup scheduler with error handling
     try {
@@ -695,7 +849,7 @@ const initializeTranscoding = async () => {
       db.all(
         `SELECT c.*, j.id as job_id 
          FROM channels c 
-         LEFT JOIN transcoding_jobs j ON c.id = j.channel_id 
+         LEFT JOIN transcoding_jobs j ON c.id = j.channel_id AND j.status IN ('starting', 'running')
          WHERE c.transcoding_enabled = 1 AND c.last_transcoding_state = 'active'`,
         (err, rows) => {
           if (err) {
@@ -725,23 +879,55 @@ const initializeTranscoding = async () => {
       );
     });
 
+    // Mark stale transcoding jobs as failed
+    await new Promise((resolve, reject) => {
+      db.run(
+        `UPDATE transcoding_jobs SET status = 'failed', error_message = 'Server restart', updated_at = ? 
+         WHERE status IN ('starting', 'running')`,
+        [new Date().toISOString()],
+        (err) => {
+          if (err) {
+            console.error('Error updating stale transcoding jobs:', err.message);
+            reject(err);
+          } else {
+            console.log('Updated stale transcoding jobs');
+            resolve();
+          }
+        }
+      );
+    });
+
     // Restart transcoding for channels that were previously active
+    let successfulRestarts = 0;
+    let failedRestarts = 0;
+
     for (const channel of channelsToRestart) {
       if (channel.transcoding_enabled && channel.last_transcoding_state === 'active') {
         console.log(`Restarting transcoding for channel: ${channel.name} (was previously active)`);
         try {
+          await new Promise(resolve => setTimeout(resolve, 1000)); // Small delay between restarts
           await restartTranscoding(channel.id, channel.url, channel.name);
+          successfulRestarts++;
+          logAction('transcoding_recovery', `Successfully restarted transcoding for channel: ${channel.name}`);
         } catch (error) {
           console.error(`Failed to restart transcoding for channel ${channel.id}:`, error);
+          failedRestarts++;
           await updateChannelStatus(channel.id, 'failed');
+          logAction('transcoding_recovery_failed', `Failed to restart transcoding for channel: ${channel.name} - ${error.message}`);
         }
       }
     }
 
-    console.log(`Transcoding service initialized - restarted ${channelsToRestart.length} channels`);
+    console.log(`Transcoding service initialized - attempted to restart ${channelsToRestart.length} channels`);
+    console.log(`Recovery results: ${successfulRestarts} successful, ${failedRestarts} failed`);
+
+    if (successfulRestarts > 0) {
+      logAction('transcoding_service_initialized', `Transcoding service initialized with ${successfulRestarts} recovered channels`);
+    }
 
   } catch (error) {
     console.error('Error initializing transcoding service:', error);
+    logAction('transcoding_service_error', `Transcoding service initialization failed: ${error.message}`);
   }
 };
 

@@ -5,6 +5,7 @@ import {
   FaMobile, 
   FaTv, 
   FaNewspaper,
+  FaCog,
   FaSignOutAlt,
   FaUser
 } from 'react-icons/fa';
@@ -45,6 +46,10 @@ const MainLayout = () => {
           <NavLink to="/news" className={isActive}>
             <span className="sidebar-item-icon"><FaNewspaper /></span>
             News
+          </NavLink>
+          <NavLink to="/transcoding-profiles" className={isActive}>
+            <span className="sidebar-item-icon"><FaCog /></span>
+            Transcoding Profiles
           </NavLink>
         </div>
       </div>
