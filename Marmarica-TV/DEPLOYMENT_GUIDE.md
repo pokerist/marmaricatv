@@ -108,9 +108,9 @@ SESSION_SECRET=your-very-secure-random-string-change-this
 DATABASE_PATH=./database.sqlite
 
 # CORS and API URLs
-CORS_ORIGIN=http://your-server-ip:3000
-API_URL=http://your-server-ip:5000
-SERVER_BASE_URL=http://your-server-ip:5000
+CORS_ORIGIN=http://155.138.231.215:3000
+API_URL=http://155.138.231.215:5000
+SERVER_BASE_URL=http://155.138.231.215:5000
 
 # File Upload
 UPLOAD_DIR=uploads
@@ -139,12 +139,12 @@ nano .env
 Add the following configuration:
 ```env
 # API Configuration
-REACT_APP_API_URL=http://your-server-ip:5000/api
+REACT_APP_API_URL=http://155.138.231.215:5000/api
 REACT_APP_API_TIMEOUT=8000
 REACT_APP_API_RETRIES=2
 
 # Upload Configuration
-REACT_APP_UPLOADS_URL=http://your-server-ip:5000/uploads
+REACT_APP_UPLOADS_URL=http://155.138.231.215:5000/uploads
 REACT_APP_MAX_UPLOAD_SIZE=5242880
 ```
 
@@ -169,20 +169,105 @@ node index.js
 
 ### Step 5: Database Migrations
 
-Run the following migration scripts in order:
+Run the following migration scripts in the exact order shown below. Each migration builds upon the previous one:
 
 ```bash
-# Add transcoding support
+# 1. Original Transcoding Support (Foundation)
 node scripts/add-transcoding-support.js
-# Expected output: "Added transcoding_enabled column to channels table"
+```
+**Expected Output:**
+```
+✓ Added transcoding_enabled column to channels table
+✓ Added transcoded_url column to channels table  
+✓ Added transcoding_status column to channels table
+✓ Created transcoding_jobs table
+Database migration completed successfully
+```
 
-# Add channel ordering
+**Verification:**
+```bash
+sqlite3 database.sqlite "PRAGMA table_info(channels);" | grep -E "(transcoding_enabled|transcoded_url|transcoding_status)"
+sqlite3 database.sqlite "SELECT name FROM sqlite_master WHERE type='table' AND name='transcoding_jobs';"
+```
+
+```bash
+# 2. Channel Ordering Support
 node scripts/add-channel-order.js
-# Expected output: "Added order_index column to channels table"
+```
+**Expected Output:**
+```
+✓ Added order_index column to channels table
+✓ Updated existing channels with order_index values
+Database migration completed successfully
+```
 
-# Add transcoding state tracking (NEW)
+**Verification:**
+```bash
+sqlite3 database.sqlite "PRAGMA table_info(channels);" | grep "order_index"
+```
+
+```bash
+# 3. Phase 1: Transcoding State Tracking
 node scripts/add-transcoding-state-tracking.js
-# Expected output: "Added last_transcoding_state column to channels table"
+```
+**Expected Output:**
+```
+✓ Added last_transcoding_state column to channels table
+✓ Updated last_transcoding_state for existing channels
+Database migration completed successfully
+```
+
+**Verification:**
+```bash
+sqlite3 database.sqlite "PRAGMA table_info(channels);" | grep "last_transcoding_state"
+```
+
+```bash
+# 4. Phase 2A: Bulk Operations Support
+node scripts/add-bulk-operations-support.js
+```
+**Expected Output:**
+```
+✓ Created bulk_operations table
+✓ Created import_logs table
+✓ Created bulk_operations status index
+✓ Created import_logs bulk_operation index
+✓ Created import_logs status index
+Database migration completed successfully
+```
+
+**Verification:**
+```bash
+sqlite3 database.sqlite "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('bulk_operations', 'import_logs');"
+```
+
+#### Migration Troubleshooting
+
+If any migration fails:
+
+**For "column already exists" errors:**
+```bash
+# Check if column exists
+sqlite3 database.sqlite "PRAGMA table_info(channels);"
+# If column exists, the migration was already run successfully
+```
+
+**For "table already exists" errors:**
+```bash
+# Check if table exists
+sqlite3 database.sqlite "SELECT name FROM sqlite_master WHERE type='table';"
+# If table exists, the migration was already run successfully
+```
+
+**For database corruption:**
+```bash
+# Backup current database
+cp database.sqlite database.backup.sqlite
+
+# Check database integrity
+sqlite3 database.sqlite "PRAGMA integrity_check;"
+
+# If corrupted, restore from backup or reinitialize
 ```
 
 ### Step 6: Admin User Creation
@@ -192,7 +277,7 @@ node scripts/add-transcoding-state-tracking.js
 node scripts/manage-admin.js create admin
 
 # OR create with specific password
-node scripts/manage-admin.js set-password admin YourSecurePassword123
+node scripts/manage-admin.js set-password admin Smart@2025
 
 # Check admin-credentials.txt for login details
 cat admin-credentials.txt
@@ -395,11 +480,22 @@ sudo ufw status
 ### 1. Database Verification
 ```bash
 cd server
-sqlite3 database.sqlite "SELECT name FROM sqlite_master WHERE type='table';"
-# Should show: devices, channels, news, actions, admins, transcoding_jobs
 
+# Check all required tables exist
+sqlite3 database.sqlite "SELECT name FROM sqlite_master WHERE type='table';"
+# Should show: devices, channels, news, actions, admins, transcoding_jobs, bulk_operations, import_logs
+
+# Verify channels table has all required columns
 sqlite3 database.sqlite "PRAGMA table_info(channels);"
-# Should include: transcoding_enabled, transcoded_url, transcoding_status, last_transcoding_state
+# Should include: transcoding_enabled, transcoded_url, transcoding_status, last_transcoding_state, order_index
+
+# Verify bulk operations tables exist
+sqlite3 database.sqlite "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('bulk_operations', 'import_logs');"
+# Should return: bulk_operations, import_logs
+
+# Check database integrity
+sqlite3 database.sqlite "PRAGMA integrity_check;"
+# Should return: ok
 ```
 
 ### 2. Admin Authentication Test
@@ -411,45 +507,174 @@ cat server/admin-credentials.txt
 curl -X POST http://localhost:5000/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username":"admin","password":"your-password"}'
+# Should return success with session cookie
+
+# Test admin session
+curl -X GET http://localhost:5000/api/auth/session \
+  -H "Cookie: connect.sid=your-session-id"
+# Should return admin user info
 ```
 
-### 3. File Upload Test
+### 3. Core API Endpoints Test
+```bash
+# Test dashboard endpoint
+curl -X GET http://localhost:5000/api/dashboard \
+  -H "Cookie: connect.sid=your-session-id"
+# Should return dashboard data
+
+# Test channels endpoint
+curl -X GET http://localhost:5000/api/channels \
+  -H "Cookie: connect.sid=your-session-id"
+# Should return channels array
+
+# Test devices endpoint
+curl -X GET http://localhost:5000/api/devices \
+  -H "Cookie: connect.sid=your-session-id"
+# Should return devices array
+
+# Test news endpoint
+curl -X GET http://localhost:5000/api/news \
+  -H "Cookie: connect.sid=your-session-id"
+# Should return news array
+```
+
+### 4. Phase 2A Features Test
+```bash
+# Test bulk operations stats
+curl -X GET http://localhost:5000/api/bulk-operations/stats \
+  -H "Cookie: connect.sid=your-session-id"
+# Should return bulk operations statistics
+
+# Test transcoding eligible channels
+curl -X GET http://localhost:5000/api/bulk-operations/transcoding-eligible \
+  -H "Cookie: connect.sid=your-session-id"
+# Should return channels eligible for transcoding
+
+# Test recent bulk operations
+curl -X GET http://localhost:5000/api/bulk-operations/recent \
+  -H "Cookie: connect.sid=your-session-id"
+# Should return recent bulk operations
+```
+
+### 5. Client API Test
+```bash
+# Test client device check (should fail for non-existent device)
+curl -X POST http://localhost:5000/api/client/check-device \
+  -H "Content-Type: application/json" \
+  -d '{"duid":"TEST123"}'
+# Should return 404 with "Device not registered"
+
+# Test client device registration
+curl -X POST http://localhost:5000/api/client/register-device \
+  -H "Content-Type: application/json" \
+  -d '{"duid":"TEST123456"}'
+# Should return success with activation code
+```
+
+### 6. Transcoding System Test
+```bash
+# Check FFmpeg installation
+ffmpeg -version
+# Should display FFmpeg version info
+
+# Check HLS directory permissions
+ls -la /var/www/html/hls_stream/
+# Should be writable by the application user
+
+# Test transcoding endpoints
+curl -X GET http://localhost:5000/api/transcoding/stats \
+  -H "Cookie: connect.sid=your-session-id"
+# Should return transcoding statistics
+
+curl -X GET http://localhost:5000/api/transcoding/jobs \
+  -H "Cookie: connect.sid=your-session-id"
+# Should return active transcoding jobs
+```
+
+### 7. File Upload Test
 ```bash
 # Check upload directory
 ls -la server/uploads/
 # Should be writable by the application user
+
+# Test file upload endpoint (requires multipart form)
+curl -X POST http://localhost:5000/api/channels/1/logo \
+  -H "Cookie: connect.sid=your-session-id" \
+  -F "logo=@/path/to/test/image.jpg"
+# Should return success or appropriate error
 ```
 
-### 4. Transcoding Test
-```bash
-# Check FFmpeg
-ffmpeg -version
-
-# Check HLS directory
-ls -la /var/www/html/hls_stream/
-# Should be writable by the application user
-```
-
-### 5. Application Health Check
+### 8. Application Health Check
 ```bash
 # Check PM2 status
 pm2 status
+# Should show marmarica-tv-server as "online"
 
 # Check application logs
 pm2 logs marmarica-tv-server --lines 50
+# Should show no critical errors
 
 # Test health endpoint
 curl http://localhost:5000/api/health
 # Should return: {"status":"OK","message":"Server is running"}
+
+# Test if transcoding service initialized
+pm2 logs marmarica-tv-server | grep -i "transcoding"
+# Should show "Transcoding service initialized"
 ```
 
-### 6. Frontend Access
+### 9. Frontend Access Test
 ```bash
-# If using Nginx
-curl -I http://your-server-ip/
+# Test direct frontend access
+curl -I http://localhost:5000/
+# Should return 200 OK with HTML content
 
-# If direct access
-curl -I http://your-server-ip:5000/
+# Test API accessibility
+curl -I http://localhost:5000/api/health
+# Should return 200 OK with JSON content
+
+# Test static files
+curl -I http://localhost:5000/uploads/
+# Should return 200 OK or 403 Forbidden (directory listing)
+
+# Test HLS stream directory
+curl -I http://localhost:5000/hls_stream/
+# Should return 200 OK or 403 Forbidden
+```
+
+### 10. Complete System Integration Test
+```bash
+# Run comprehensive test script
+cat > test-system.sh << 'EOF'
+#!/bin/bash
+echo "Testing Marmarica TV System..."
+
+# Test 1: Database
+echo "1. Testing database..."
+sqlite3 server/database.sqlite "SELECT COUNT(*) FROM sqlite_master WHERE type='table';" || echo "❌ Database test failed"
+
+# Test 2: Health endpoint
+echo "2. Testing health endpoint..."
+curl -s http://localhost:5000/api/health | grep -q "OK" && echo "✅ Health OK" || echo "❌ Health failed"
+
+# Test 3: PM2 status
+echo "3. Testing PM2 status..."
+pm2 status marmarica-tv-server | grep -q "online" && echo "✅ PM2 OK" || echo "❌ PM2 failed"
+
+# Test 4: FFmpeg
+echo "4. Testing FFmpeg..."
+ffmpeg -version > /dev/null 2>&1 && echo "✅ FFmpeg OK" || echo "❌ FFmpeg failed"
+
+# Test 5: Directories
+echo "5. Testing directories..."
+[ -d "/var/www/html/hls_stream" ] && echo "✅ HLS directory OK" || echo "❌ HLS directory failed"
+[ -d "server/uploads" ] && echo "✅ Upload directory OK" || echo "❌ Upload directory failed"
+
+echo "System test completed!"
+EOF
+
+chmod +x test-system.sh
+./test-system.sh
 ```
 
 ## 🔄 Post-Deployment Tasks
@@ -587,17 +812,98 @@ For technical issues during deployment:
 
 ## 🎉 Success Criteria
 
-Your deployment is successful when:
+Your deployment is successful when all of the following are working:
+
+### Core System
 - [ ] Admin panel accessible at configured URL
 - [ ] Admin login works with created credentials
-- [ ] Channel management (CRUD operations) works
-- [ ] File upload functionality works
-- [ ] Transcoding service starts and stops properly
-- [ ] Client API endpoints respond correctly
-- [ ] System restarts maintain transcoding state
-- [ ] HLS streams are accessible via direct URL
-- [ ] All database migrations completed successfully
 - [ ] PM2 shows application as "online"
+- [ ] All database migrations completed successfully
+- [ ] Database integrity check passes
+- [ ] FFmpeg is installed and accessible
+- [ ] HLS output directory has correct permissions
+
+### Basic Features
+- [ ] Channel management (CRUD operations) works
+- [ ] Device management (CRUD operations) works
+- [ ] News management (CRUD operations) works
+- [ ] Dashboard displays statistics correctly
+- [ ] File upload functionality works
+- [ ] Logo upload for channels works
+
+### Phase 1 Features ✅
+- [ ] Original URLs display in channel edit forms
+- [ ] Transcoded URLs display separately as read-only
+- [ ] Transcoding service starts and stops properly
+- [ ] System restarts maintain transcoding state
+- [ ] `last_transcoding_state` column exists in channels table
+- [ ] Previously active channels restart automatically after reboot
+
+### Phase 2A Features ✅
+- [ ] M3U8 file upload interface works
+- [ ] M3U8 parsing and validation works
+- [ ] Duplicate detection prevents re-imports
+- [ ] Bulk channel import works
+- [ ] Bulk transcoding modal loads eligible channels
+- [ ] "Transcode All" functionality works
+- [ ] Bulk operations tracking works
+- [ ] `bulk_operations` and `import_logs` tables exist
+
+### API Endpoints
+- [ ] Health endpoint returns OK status
+- [ ] Admin authentication endpoints work
+- [ ] Channel API endpoints respond correctly
+- [ ] Device API endpoints respond correctly
+- [ ] News API endpoints respond correctly
+- [ ] Dashboard API endpoints respond correctly
+- [ ] Transcoding API endpoints respond correctly
+- [ ] Bulk operations API endpoints respond correctly
+- [ ] Client API endpoints respond correctly
+
+### Transcoding System
+- [ ] FFmpeg processes can be spawned
+- [ ] HLS streams are accessible via direct URL
+- [ ] Transcoding status updates correctly
+- [ ] Transcoded URLs are generated properly
+- [ ] Transcoding cleanup works automatically
+- [ ] Storage monitoring functions correctly
+
+### Client Integration
+- [ ] Device registration works
+- [ ] Device activation works
+- [ ] Device status checking works
+- [ ] Content filtering by device type works
+- [ ] Expired device handling works correctly
+
+### File Management
+- [ ] Upload directory is writable
+- [ ] HLS stream directory is writable
+- [ ] File cleanup processes work
+- [ ] Storage limits are enforced
+- [ ] Backup procedures are in place
+
+### Performance & Monitoring
+- [ ] System resource usage is reasonable
+- [ ] Log files are being generated
+- [ ] Error handling works properly
+- [ ] Performance monitoring is functional
+- [ ] Automated cleanup prevents disk space issues
+
+### Security
+- [ ] Admin authentication is secure
+- [ ] Session management works
+- [ ] Input validation prevents injection
+- [ ] File upload security works
+- [ ] API rate limiting is functional (if implemented)
+
+### Integration Testing
+- [ ] Complete system integration test passes
+- [ ] All documented API endpoints are accessible
+- [ ] Frontend-backend communication works
+- [ ] Database operations are reliable
+- [ ] External dependencies (FFmpeg) are functional
+
+**Deployment Complete**: When all items above are checked ✅
 
 ---
 
