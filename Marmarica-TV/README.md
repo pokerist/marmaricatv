@@ -1,393 +1,506 @@
-# AlKarma TV IPTV Admin Panel
+# Marmarica TV IPTV Management Panel
 
-Admin panel for managing IPTV devices, channels, and news for AlKarma TV.
+A comprehensive admin panel for managing IPTV devices, channels, and content for Marmarica TV broadcasting platform.
 
-## Prerequisites
+## 📋 Table of Contents
 
-- Node.js 14+ and npm installed
-- PM2 installed globally (`npm install -g pm2`)
-- Git for version control
-- Ubuntu server for deployment
+- [Project Overview](#project-overview)
+- [Features](#features)
+- [Architecture](#architecture)
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [Deployment](#deployment)
+- [Development](#development)
+- [API Documentation](#api-documentation)
+- [Maintenance](#maintenance)
+- [Troubleshooting](#troubleshooting)
 
-## Channel Sorting Feature
+## 🎯 Project Overview
 
-The admin panel now includes drag-and-drop channel sorting functionality that preserves device-specific channel permissions.
+The Marmarica TV IPTV Management Panel is a full-stack web application designed to manage IPTV streaming operations. It provides a secure admin interface for managing channels, devices, and content while offering public APIs for client applications.
 
-### Features
+### Key Components
 
-- Drag-and-drop interface for reordering channels
-- Persistent channel order across all device types
-- Device-specific channel filtering remains unchanged
-- Real-time order updates with visual feedback
-- Order preserved across admin and client APIs
+- **Admin Panel**: React-based web interface for system management
+- **Backend API**: Node.js/Express server with SQLite database
+- **Transcoding Service**: FFmpeg-based HLS transcoding system
+- **Client APIs**: Public endpoints for device authentication and content delivery
+- **Authentication**: Secure session-based admin authentication
 
-### Database Migration
+## ✨ Features
 
-Before using the channel sorting feature, run the database migration:
+### Channel Management
+- Add, edit, and delete IPTV channels
+- Drag-and-drop channel reordering
+- Logo upload and management
+- Channel categorization and filtering
+- Bulk operations support
 
-```bash
-# From the server directory
-node scripts/add-channel-order.js
+### Transcoding System
+- Real-time MPEG-TS to HLS transcoding
+- Automatic segment cleanup
+- Persistent transcoding state tracking
+- System restart recovery
+- Storage monitoring and optimization
 
-# Verify the migration
-sqlite3 database.sqlite "SELECT name, order_index FROM channels ORDER BY order_index ASC;"
-```
+### Device Management
+- Device registration and authentication
+- Expiry date tracking
+- Usage statistics
+- Device type filtering
 
-The migration will:
-1. Add an order_index column to the channels table
-2. Initialize order based on current name-based sorting
-3. Create an index for better performance
+### Content Management
+- News and announcements system
+- Content categorization
+- Publication scheduling
 
-### Using Channel Sorting
+### Security
+- Secure admin authentication
+- Session management
+- Role-based access control
+- Input validation and sanitization
 
-1. Access the Channels Management page
-2. Drag channels to desired positions using the grab handle
-3. Click "Save Order" to persist the changes
-4. The new order will be reflected in all channel lists, including device APIs
+## 🏗️ Architecture
 
-### API Changes
+### Backend
+- **Framework**: Node.js with Express
+- **Database**: SQLite for lightweight deployment
+- **Authentication**: Session-based with bcrypt
+- **File Storage**: Local filesystem with multer
+- **Transcoding**: FFmpeg with HLS output
+- **Process Management**: PM2 for production
 
-New endpoint added:
-```
-POST /api/admin/channels/reorder
-Body: { orderedIds: number[] }
-Response: { message: string, data: number[] }
-```
+### Frontend
+- **Framework**: React 18 with functional components
+- **Routing**: React Router v6
+- **State Management**: React Context API
+- **UI Library**: React Bootstrap
+- **Form Handling**: Formik with Yup validation
+- **HTTP Client**: Axios with interceptors
 
-Modified endpoints (now return channels ordered by order_index):
-- GET /api/channels
-- GET /api/client/check-device (channels in response)
+### Infrastructure
+- **Reverse Proxy**: Nginx (recommended for production)
+- **SSL/TLS**: Optional (HTTP-only configuration supported)
+- **Storage**: Local filesystem with automatic cleanup
+- **Logging**: Console-based with action tracking
 
-### Modified Files
+## 🚀 Installation
 
-Backend:
-- server/routes/channels.js (added reorder endpoint)
-- server/routes/client.js (updated ordering)
-- server/scripts/add-channel-order.js (new migration script)
-
-Frontend:
-- client/package.json (added react-beautiful-dnd)
-- client/src/pages/channels/ChannelsList.js (added drag-drop UI)
-- client/src/services/api.js (added reorderChannels method)
-
-## Authentication System Overview
-
-The admin panel includes secure authentication to protect administrative routes while keeping client device APIs open.
-
-### Features
-
-- Secure admin login with session management
-- Protected admin routes with role-based access
-- Open client device APIs (no authentication required)
-- Password hashing with bcrypt
-- HTTP-only session cookies
-- 12-hour session expiry
-- No SSL requirement (HTTP only)
-
-## Deployment Guide
-
-Follow these steps in order to properly deploy the system.
-
-### 1. Initial Setup
+### Prerequisites
 
 ```bash
-# Clone the repository
-git clone https://github.com/pokerist/marmaricatv.git
-cd marmaricatv/Marmarica-TV
+# Required software
+Node.js 18+ 
+npm 8+
+FFmpeg 4.4+
+PM2 (for production)
+Git
 
-# Install dependencies
-cd server && npm install
-cd ../client && npm install
+# System requirements
+Ubuntu 20.04+ (or similar Linux distribution)
+4GB+ RAM
+50GB+ storage (depending on transcoding needs)
 ```
 
-### 2. Environment Configuration
+### Step-by-Step Installation
 
-#### Development Environment
+1. **Clone the Repository**
+   ```bash
+   git clone https://github.com/pokerist/marmaricatv.git
+   cd marmaricatv/Marmarica-TV
+   ```
 
-1. Create server/.env file:
-```env
-# Server Configuration
-NODE_ENV=development
-PORT=5000
-SESSION_SECRET=your-secure-random-string  # Change this!
+2. **Install Dependencies**
+   ```bash
+   # Backend dependencies
+   cd server
+   npm install
+   
+   # Frontend dependencies
+   cd ../client
+   npm install
+   cd ..
+   ```
 
-# CORS Configuration
-CORS_ORIGIN=http://192.168.100.232:3000
-API_URL=http://192.168.100.232:5000
+3. **Database Setup**
+   ```bash
+   # Initialize database tables
+   cd server
+   node index.js
+   # Wait for "Database tables initialized" message, then Ctrl+C
+   ```
 
-# Optional
-UPLOAD_DIR=uploads  # Default: uploads
-```
+4. **Run Database Migrations**
+   ```bash
+   # Add transcoding support
+   node scripts/add-transcoding-support.js
+   
+   # Add channel ordering
+   node scripts/add-channel-order.js
+   
+   # Add transcoding state tracking
+   node scripts/add-transcoding-state-tracking.js
+   ```
 
-2. Create client/.env file:
-```env
-# API Configuration
-REACT_APP_API_URL=http://192.168.100.232:5000/api
-REACT_APP_API_TIMEOUT=8000
-REACT_APP_API_RETRIES=2
+5. **Create Admin User**
+   ```bash
+   # Generate admin credentials
+   node scripts/manage-admin.js create admin
+   
+   # Or set specific password
+   node scripts/manage-admin.js set-password admin YourSecurePassword123
+   ```
 
-# Upload URL
-REACT_APP_UPLOADS_URL=http://192.168.100.232:5000/uploads
-```
+## ⚙️ Configuration
 
-#### Production Environment
+### Environment Variables
 
-1. Update server/.env:
+Create `.env` files in both `server/` and `client/` directories:
+
+#### Server Configuration (`server/.env`)
 ```env
 # Server Configuration
 NODE_ENV=production
 PORT=5000
-SESSION_SECRET=your-secure-random-string  # Change this!
+SESSION_SECRET=your-very-secure-random-string
 
-# CORS Configuration
-CORS_ORIGIN=http://192.168.100.232
-API_URL=http://192.168.100.232
+# Database
+DATABASE_PATH=./database.sqlite
 
-# Optional
+# CORS and API
+CORS_ORIGIN=http://your-domain.com
+API_URL=http://your-domain.com
+SERVER_BASE_URL=http://your-domain.com
+
+# File Upload
 UPLOAD_DIR=uploads
+MAX_FILE_SIZE=5242880
+
+# Transcoding
+FFMPEG_PATH=ffmpeg
+HLS_OUTPUT_BASE=/var/www/html/hls_stream
+CLEANUP_INTERVAL=300000
+MAX_SEGMENT_AGE=30000
+MAX_CHANNEL_DIR_SIZE=104857600
 ```
 
-2. Update client/.env:
+#### Client Configuration (`client/.env`)
 ```env
 # API Configuration
-REACT_APP_API_URL=http://192.168.100.232/api
+REACT_APP_API_URL=http://your-domain.com/api
 REACT_APP_API_TIMEOUT=8000
 REACT_APP_API_RETRIES=2
 
-# Upload URL
-REACT_APP_UPLOADS_URL=http://192.168.100.232/uploads
+# Upload Configuration
+REACT_APP_UPLOADS_URL=http://your-domain.com/uploads
+REACT_APP_MAX_UPLOAD_SIZE=5242880
 ```
 
-### 3. Database Initialization
+### FFmpeg Configuration
 
-The database must be initialized before creating admin users:
+Ensure FFmpeg is installed and accessible:
+```bash
+# Install FFmpeg
+sudo apt update
+sudo apt install ffmpeg
+
+# Verify installation
+ffmpeg -version
+```
+
+### Storage Configuration
 
 ```bash
-# Start the server temporarily to create database tables
-cd ../server
-node index.js
+# Create HLS output directory
+sudo mkdir -p /var/www/html/hls_stream
+sudo chown -R $USER:$USER /var/www/html/hls_stream
+sudo chmod -R 755 /var/www/html/hls_stream
 
-# Wait for the message "Database tables initialized"
-# Then press Ctrl+C to stop the server
+# Create upload directory
+mkdir -p server/uploads
+chmod 755 server/uploads
 ```
 
-Verify the database was created:
-```bash
-ls -l database.sqlite  # Should show the database file
-```
+## 🚀 Deployment
 
-### 4. Admin User Creation
-
-IMPORTANT: Only run these commands after the database has been initialized in step 3.
+### Development Deployment
 
 ```bash
-
-# Create admin with random password
-node scripts/manage-admin.js create admin
-
-# OR set a specific password
-node scripts/manage-admin.js set-password admin Smart@2025#
-```
-
-The credentials will be saved in `server/admin-credentials.txt`
-
-Verify the admin was created:
-```bash
-sqlite3 database.sqlite "SELECT username FROM admins;"
-# Should show: admin
-```
-
-### 5. PM2 Configuration
-
-1. Update ecosystem.config.js:
-```javascript
-module.exports = {
-  apps: [{
-    name: 'marmarica-tv-server',
-    script: 'server/index.js',
-    env: {
-      NODE_ENV: 'production',
-      PORT: 5000,
-      SESSION_SECRET: 'Qw73o9Gx#h!sZm42nXvtp8bLaT@E0RuQj'  // Same as in .env
-    }
-  }]
-}
-```
-
-2. Build and start:
-```bash
-# Build frontend
-cd ../client
-npm run build
-
-# Start server with PM2
-cd ..
-pm2 start ecosystem.config.js
-```
-
-3. Verify deployment:
-```bash
-# Check server status
-pm2 status
-
-# Check logs for errors
-pm2 logs marmarica-tv-server
-```
-# save current pm2 state
-pm2 save --force
-
-# if you need to stop all >>> pm2 delete all
-
-### 6. Running in Development Mode
-
-1. Ensure environment files are configured correctly:
-   - server/.env should have NODE_ENV=development
-   - CORS_ORIGIN should match your frontend URL
-   - API_URL should include the port number
-
-2. Start the backend server:
-```bash
+# Start backend server
 cd server
-npm run dev  # Uses nodemon for auto-reload
-```
+npm run dev
 
-3. Verify the server output:
-   - Should see "Server running on port 5000"
-   - Should see "CORS enabled for origin: http://192.168.100.232:3000"
-   - Should see database initialization messages
-
-4. Start the frontend development server:
-```bash
+# Start frontend development server (in new terminal)
 cd client
-npm start    # Runs on http://192.168.100.232:3000
+npm start
 ```
 
-5. Access the admin panel:
-   - Open http://192.168.100.232:3000 in your browser
-   - You should see the login page
-   - Check browser console for API configuration message
-   - Log in with the admin credentials
+Access the application at `http://localhost:3000`
 
-6. Test client APIs:
-```bash
-# Should return channel list
-curl http://192.168.100.232:5000/api/client/channels
-```
+### Production Deployment
 
-7. Troubleshooting:
-   - If you see CORS errors, verify CORS_ORIGIN matches your frontend URL exactly
-   - If API calls fail, check that API_URL in server/.env matches REACT_APP_API_URL in client/.env
-   - Make sure both servers are running (backend on :5000, frontend on :3000)
-
-### 7. Production Deployment
-
-1. Access the admin panel:
-   - Open http://192.168.100.232:3000 in your browser
-   - You should see the login page
-   - Log in with the admin credentials
-
-2. Test client APIs:
+1. **Build Frontend**
    ```bash
-   # Should return channel list
-   curl http://192.168.100.232/api/client/channels
+   cd client
+   npm run build
    ```
 
-## Admin User Management
+2. **Configure PM2**
+   ```bash
+   # Create PM2 ecosystem file
+   cp ecosystem.config.js.example ecosystem.config.js
+   # Edit with your configuration
+   ```
 
-### Creating Additional Admins
+3. **Start with PM2**
+   ```bash
+   # Start the application
+   pm2 start ecosystem.config.js
+   
+   # Save PM2 configuration
+   pm2 save
+   pm2 startup
+   ```
 
+4. **Nginx Configuration** (Recommended)
+   ```nginx
+   server {
+       listen 80;
+       server_name your-domain.com;
+       
+       location / {
+           proxy_pass http://localhost:5000;
+           proxy_set_header Host $host;
+           proxy_set_header X-Real-IP $remote_addr;
+           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+           proxy_set_header X-Forwarded-Proto $scheme;
+       }
+       
+       location /hls_stream {
+           alias /var/www/html/hls_stream;
+           expires 1s;
+           add_header Cache-Control "no-cache, no-store, must-revalidate";
+       }
+       
+       location /uploads {
+           alias /path/to/server/uploads;
+           expires 30d;
+           add_header Cache-Control "public, immutable";
+       }
+   }
+   ```
+
+## 🔧 Development
+
+### Development Server
+
+```bash
+# Backend development server with auto-reload
+cd server
+npm run dev
+
+# Frontend development server
+cd client
+npm start
+```
+
+### Code Structure
+
+```
+server/
+├── controllers/         # Route handlers
+├── middleware/         # Authentication & validation
+├── models/            # Database models
+├── routes/            # API routes
+├── services/          # Business logic
+├── scripts/           # Database migrations & utilities
+└── uploads/           # File uploads
+
+client/
+├── src/
+│   ├── components/    # Reusable UI components
+│   ├── pages/         # Page components
+│   ├── services/      # API services
+│   ├── contexts/      # React contexts
+│   └── utils/         # Utility functions
+└── public/            # Static assets
+```
+
+### Available Scripts
+
+#### Backend
+- `npm run dev` - Development server with nodemon
+- `npm start` - Production server
+- `npm test` - Run tests (if configured)
+
+#### Frontend
+- `npm start` - Development server
+- `npm run build` - Production build
+- `npm test` - Run tests
+- `npm run eject` - Eject from Create React App
+
+## 📊 Maintenance
+
+### Database Maintenance
+
+```bash
+# Backup database
+cp server/database.sqlite server/database.backup.sqlite
+
+# Check database integrity
+sqlite3 server/database.sqlite "PRAGMA integrity_check;"
+
+# Vacuum database (optimize)
+sqlite3 server/database.sqlite "VACUUM;"
+```
+
+### Log Management
+
+```bash
+# View PM2 logs
+pm2 logs marmarica-tv-server
+
+# Clear logs
+pm2 flush
+
+# Monitor application
+pm2 monit
+```
+
+### Storage Cleanup
+
+```bash
+# Manual cleanup of HLS segments
+find /var/www/html/hls_stream -name "*.m4s" -mtime +1 -delete
+find /var/www/html/hls_stream -name "*.ts" -mtime +1 -delete
+
+# Check disk usage
+du -sh /var/www/html/hls_stream/*
+```
+
+### System Health Checks
+
+```bash
+# Check application status
+pm2 status
+
+# Check system resources
+htop
+
+# Check disk space
+df -h
+
+# Check FFmpeg processes
+ps aux | grep ffmpeg
+```
+
+## 🛠️ Troubleshooting
+
+### Common Issues
+
+#### Database Connection Errors
+```bash
+# Check database file permissions
+ls -la server/database.sqlite
+chmod 664 server/database.sqlite
+
+# Reinitialize database if corrupted
+rm server/database.sqlite
+node server/index.js
+```
+
+#### Transcoding Issues
+```bash
+# Check FFmpeg installation
+ffmpeg -version
+
+# Check HLS output directory permissions
+ls -la /var/www/html/hls_stream
+sudo chown -R $USER:$USER /var/www/html/hls_stream
+```
+
+#### Authentication Problems
+```bash
+# Reset admin password
+cd server
+node scripts/manage-admin.js set-password admin NewPassword123
+```
+
+#### File Upload Issues
+```bash
+# Check upload directory permissions
+ls -la server/uploads
+chmod 755 server/uploads
+```
+
+### Performance Optimization
+
+#### Database Optimization
+```bash
+# Add indexes for better performance
+sqlite3 server/database.sqlite "CREATE INDEX IF NOT EXISTS idx_channels_type ON channels(type);"
+sqlite3 server/database.sqlite "CREATE INDEX IF NOT EXISTS idx_channels_category ON channels(category);"
+```
+
+#### Memory Management
+```bash
+# Monitor memory usage
+pm2 monit
+
+# Restart application if memory issues
+pm2 restart marmarica-tv-server
+```
+
+### Error Codes
+
+| Code | Description | Solution |
+|------|-------------|----------|
+| 500  | Internal server error | Check server logs |
+| 404  | Resource not found | Verify URL and data |
+| 403  | Authentication failed | Check credentials |
+| 400  | Bad request | Validate input data |
+
+## 📝 Manual Actions Required
+
+After code deployment, the following actions must be performed on the production server:
+
+### Database Migration
 ```bash
 cd server
-node scripts/manage-admin.js create <username>
+node scripts/add-transcoding-state-tracking.js
 ```
 
-The credentials will be saved in `server/admin-credentials.txt`
+### Environment Setup
+1. Update `.env` files with production values
+2. Restart PM2 processes: `pm2 restart all`
+3. Verify transcoding directory permissions
 
-### Password Reset
+### Testing
+1. Test admin login functionality
+2. Verify channel transcoding works
+3. Check file upload capabilities
+4. Test device authentication APIs
 
-```bash
-# Generate new random password
-node scripts/manage-admin.js create <username>
+## 🔐 Security Notes
 
-# OR set specific password
-node scripts/manage-admin.js set-password <username> <new-password>
-```
-
-### Emergency Password Reset
-
-If you need to reset a password directly in the database:
-
-1. Generate a bcrypt hash:
-```bash
-node -e "const bcrypt = require('bcrypt'); bcrypt.hash('new-password', 10, (err, hash) => console.log(hash));"
-```
-
-2. Update the database:
-```bash
-sqlite3 database.sqlite "UPDATE admins SET password = 'generated-hash' WHERE username = 'admin';"
-```
-
-## Troubleshooting
-
-### "no such table: admins" Error
-
-This means the database tables haven't been initialized. Follow these steps:
-
-1. Ensure you're in the server directory:
-```bash
-cd server
-```
-
-2. Start the server to initialize tables:
-```bash
-node index.js
-# Wait for "Database tables initialized" message
-# Press Ctrl+C to stop
-```
-
-3. Try the admin creation command again
-
-### Other Common Issues
-
-1. "EADDRINUSE" error:
-```bash
-# Find process using the port
-sudo lsof -i :5000
-# Kill the process
-sudo kill -9 <PID>
-```
-
-2. Permission issues:
-```bash
-# Fix ownership
-sudo chown -R $USER:$USER .
-# Fix permissions
-chmod -R 755 .
-```
-
-## Security Notes
-
-- All admin routes require authentication
-- Client device routes (/api/client/*) remain open
+- All passwords are hashed using bcrypt
 - Sessions expire after 12 hours
-- Passwords are hashed with bcrypt
-- No SSL/HTTPS configuration (as per requirements)
+- Admin routes require authentication
+- Client APIs remain publicly accessible
+- File uploads are validated and size-limited
+- SQL injection protection through parameterized queries
 
-## Modified Files
+## 📄 License
 
-Backend:
-- server/package.json (added auth dependencies)
-- server/index.js (added session handling)
-- server/middleware/auth.js (new)
-- server/controllers/auth.js (new)
-- server/routes/auth.js (new)
-- server/scripts/manage-admin.js (new)
+This project is proprietary software for Marmarica TV operations.
 
-Frontend:
-- client/src/App.js (added auth routes)
-- client/src/contexts/AuthContext.js (new)
-- client/src/components/PrivateRoute.js (new)
-- client/src/pages/auth/Login.js (new)
-- client/src/services/api.js (updated for auth)
-- client/src/components/layouts/MainLayout.js (added logout)
-- client/src/index.css (added auth styles)
+## 🤝 Support
+
+For technical support and deployment assistance, contact the development team.
+
+---
+
+**Version**: 2.0.0  
+**Last Updated**: January 2025  
+**Compatible Node.js**: 18+  
+**Database**: SQLite 3.x

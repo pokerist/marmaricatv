@@ -91,8 +91,9 @@ function asyncHandler(fn) {
 }
 
 // Helper function to process channel URL - return transcoded URL if enabled
-function processChannelUrl(channel) {
-  if (channel.transcoding_enabled && 
+function processChannelUrl(channel, preserveOriginalUrl = false) {
+  if (!preserveOriginalUrl && 
+      channel.transcoding_enabled && 
       channel.transcoded_url) {
     // Replace the original URL with the transcoded URL
     channel.url = channel.transcoded_url;
@@ -166,8 +167,9 @@ router.get('/:id', asyncHandler(async (req, res) => {
         return resolve();
       }
       
-      // Process channel to return transcoded URL if active
-      const processedChannel = processChannelUrl(row);
+      // For single channel retrieval (edit form), preserve original URL
+      // The edit form needs the original URL, not the transcoded URL
+      const processedChannel = processChannelUrl(row, true);
       
       res.json({ data: processedChannel });
       resolve();

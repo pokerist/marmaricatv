@@ -300,7 +300,7 @@ const ChannelForm = () => {
                   {/* Stream URL */}
                   <Col md={6}>
                     <Form.Group className="mb-3">
-                      <Form.Label>Stream URL</Form.Label>
+                      <Form.Label>Original Stream URL</Form.Label>
                       <Form.Control
                         type="text"
                         name="url"
@@ -313,6 +313,9 @@ const ChannelForm = () => {
                       <Form.Control.Feedback type="invalid">
                         {errors.url}
                       </Form.Control.Feedback>
+                      <Form.Text className="text-muted">
+                        This is the original source URL that will be transcoded
+                      </Form.Text>
                     </Form.Group>
                   </Col>
                 </Row>
@@ -435,18 +438,30 @@ const ChannelForm = () => {
                                     </Badge>
                                   )}
                                 </div>
-                                
-                                {channel.transcoded_url && (
-                                  <div className="mt-2">
-                                    <small className="text-muted">
-                                      Transcoded URL: <code>{channel.transcoded_url}</code>
-                                    </small>
-                                  </div>
-                                )}
                               </div>
                             </Col>
                           )}
                         </Row>
+                        
+                        {/* Transcoded URL Display */}
+                        {isEditing && channel && channel.transcoded_url && (
+                          <Row>
+                            <Col md={12}>
+                              <Form.Group className="mb-3">
+                                <Form.Label>Transcoded Stream URL (Read-only)</Form.Label>
+                                <Form.Control
+                                  type="text"
+                                  value={channel.transcoded_url}
+                                  readOnly
+                                  className="bg-light"
+                                />
+                                <Form.Text className="text-muted">
+                                  This is the processed HLS stream URL that clients will use when transcoding is active
+                                </Form.Text>
+                              </Form.Group>
+                            </Col>
+                          </Row>
+                        )}
                         
                         {values.transcoding_enabled && (
                           <Alert variant="info" className="mt-3">

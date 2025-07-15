@@ -36,7 +36,7 @@ const logAction = (actionType, description) => {
 };
 
 // Helper function to update channel transcoding status
-const updateChannelStatus = (channelId, status, transcodedUrl = null) => {
+const updateChannelStatus = (channelId, status, transcodedUrl = null, persistState = true) => {
   return new Promise((resolve, reject) => {
     const now = new Date().toISOString();
     let sql = 'UPDATE channels SET transcoding_status = ?, updated_at = ?';
@@ -45,6 +45,12 @@ const updateChannelStatus = (channelId, status, transcodedUrl = null) => {
     if (transcodedUrl !== null) {
       sql += ', transcoded_url = ?';
       params.push(transcodedUrl);
+    }
+
+    // Update last_transcoding_state for persistence across restarts
+    if (persistState) {
+      sql += ', last_transcoding_state = ?';
+      params.push(status === 'active' ? 'active' : status === 'failed' ? 'failed' : 'idle');
     }
 
     sql += ' WHERE id = ?';
@@ -684,16 +690,16 @@ const initializeTranscoding = async () => {
       console.error('Failed to start cleanup scheduler, but continuing initialization:', error);
     }
 
-    // Find channels that were being transcoded when server stopped
-    const activeChannels = await new Promise((resolve, reject) => {
+    // Find channels that should be transcoded based on persistent state
+    const channelsToRestart = await new Promise((resolve, reject) => {
       db.all(
         `SELECT c.*, j.id as job_id 
          FROM channels c 
          LEFT JOIN transcoding_jobs j ON c.id = j.channel_id 
-         WHERE c.transcoding_enabled = 1 AND c.transcoding_status != 'inactive'`,
+         WHERE c.transcoding_enabled = 1 AND c.last_transcoding_state = 'active'`,
         (err, rows) => {
           if (err) {
-            console.error('Error fetching active channels:', err.message);
+            console.error('Error fetching channels to restart:', err.message);
             reject(err);
           } else {
             resolve(rows);
@@ -702,10 +708,27 @@ const initializeTranscoding = async () => {
       );
     });
 
-    // Restart transcoding for channels that were active
-    for (const channel of activeChannels) {
-      if (channel.transcoding_enabled) {
-        console.log(`Restarting transcoding for channel: ${channel.name}`);
+    // Reset transcoding status for all channels to inactive on startup
+    await new Promise((resolve, reject) => {
+      db.run(
+        `UPDATE channels SET transcoding_status = 'inactive', transcoded_url = NULL 
+         WHERE transcoding_status != 'inactive'`,
+        (err) => {
+          if (err) {
+            console.error('Error resetting transcoding status:', err.message);
+            reject(err);
+          } else {
+            console.log('Reset transcoding status for all channels');
+            resolve();
+          }
+        }
+      );
+    });
+
+    // Restart transcoding for channels that were previously active
+    for (const channel of channelsToRestart) {
+      if (channel.transcoding_enabled && channel.last_transcoding_state === 'active') {
+        console.log(`Restarting transcoding for channel: ${channel.name} (was previously active)`);
         try {
           await restartTranscoding(channel.id, channel.url, channel.name);
         } catch (error) {
@@ -715,7 +738,7 @@ const initializeTranscoding = async () => {
       }
     }
 
-    console.log('Transcoding service initialized successfully');
+    console.log(`Transcoding service initialized - restarted ${channelsToRestart.length} channels`);
 
   } catch (error) {
     console.error('Error initializing transcoding service:', error);

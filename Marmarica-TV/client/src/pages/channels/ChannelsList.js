@@ -4,9 +4,11 @@ import {
   Form, InputGroup, Dropdown, DropdownButton, Image 
 } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
-import { FaPlus, FaSearch, FaEdit, FaTrash, FaFilter, FaArrowUp, FaArrowDown, FaPlay, FaStop, FaSync } from 'react-icons/fa';
+import { FaPlus, FaSearch, FaEdit, FaTrash, FaFilter, FaArrowUp, FaArrowDown, FaPlay, FaStop, FaSync, FaUpload } from 'react-icons/fa';
 import { channelsAPI, transcodingAPI } from '../../services/api';
 import { toast } from 'react-toastify';
+import M3U8Upload from '../../components/M3U8Upload';
+import BulkTranscodingModal from '../../components/BulkTranscodingModal';
 
 const ChannelsList = () => {
   const [channels, setChannels] = useState([]);
@@ -18,6 +20,18 @@ const ChannelsList = () => {
   });
   const [searchTerm, setSearchTerm] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [showM3U8Upload, setShowM3U8Upload] = useState(false);
+  const [showBulkTranscoding, setShowBulkTranscoding] = useState(false);
+
+  // Handle M3U8 import success
+  const handleImportSuccess = (results) => {
+    fetchChannels(); // Refresh the channel list
+  };
+
+  // Handle bulk transcoding success
+  const handleTranscodingSuccess = (results) => {
+    fetchChannels(); // Refresh the channel list
+  };
 
   // Check if any filters are active
   const hasActiveFilters = Boolean(
@@ -238,6 +252,20 @@ const ChannelsList = () => {
       <div className="d-flex justify-content-between align-items-center mb-3">
         <h1 className="page-title">Channels Management</h1>
         <div>
+          <Button 
+            variant="info" 
+            className="me-2" 
+            onClick={() => setShowM3U8Upload(true)}
+          >
+            <FaUpload className="me-2" /> Import M3U8
+          </Button>
+          <Button 
+            variant="warning" 
+            className="me-2" 
+            onClick={() => setShowBulkTranscoding(true)}
+          >
+            <FaPlay className="me-2" /> Bulk Transcoding
+          </Button>
           <Button 
             variant="success" 
             className="me-2" 
@@ -529,6 +557,20 @@ const ChannelsList = () => {
           </Card.Body>
         </Card>
       )}
+      
+      {/* M3U8 Upload Modal */}
+      <M3U8Upload 
+        show={showM3U8Upload}
+        onHide={() => setShowM3U8Upload(false)}
+        onImportSuccess={handleImportSuccess}
+      />
+      
+      {/* Bulk Transcoding Modal */}
+      <BulkTranscodingModal 
+        show={showBulkTranscoding}
+        onHide={() => setShowBulkTranscoding(false)}
+        onTranscodingSuccess={handleTranscodingSuccess}
+      />
     </Container>
   );
 };

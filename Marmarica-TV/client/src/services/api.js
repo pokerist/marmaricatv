@@ -209,6 +209,28 @@ export const transcodingAPI = {
   getTranscodingStats: () => retryRequest(() => api.get('/transcoding/stats')),
 };
 
+// Bulk Operations API
+export const bulkOperationsAPI = {
+  parseM3U8: (file) => {
+    const formData = new FormData();
+    formData.append('m3u8File', file);
+    
+    return retryRequest(() => api.post('/bulk-operations/parse-m3u8', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+      timeout: API_TIMEOUT * 3, // Extended timeout for file processing
+    }));
+  },
+  importChannels: (validChannels) => retryRequest(() => api.post('/bulk-operations/import-channels', { validChannels })),
+  startBulkTranscoding: (channelIds = null) => retryRequest(() => api.post('/bulk-operations/start-bulk-transcoding', { channelIds })),
+  getBulkOperationStatus: (operationId) => retryRequest(() => api.get(`/bulk-operations/status/${operationId}`)),
+  getRecentBulkOperations: (limit = 10) => retryRequest(() => api.get(`/bulk-operations/recent?limit=${limit}`)),
+  getImportLogs: (operationId) => retryRequest(() => api.get(`/bulk-operations/import-logs/${operationId}`)),
+  getTranscodingEligibleChannels: () => retryRequest(() => api.get('/bulk-operations/transcoding-eligible')),
+  getBulkOperationsStats: () => retryRequest(() => api.get('/bulk-operations/stats')),
+};
+
 // Auth API
 export const authAPI = {
   login: (credentials) => retryRequest(() => api.post('/auth/login', credentials)),
