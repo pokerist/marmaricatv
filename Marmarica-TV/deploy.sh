@@ -130,7 +130,7 @@ install_dependencies() {
     # Install PM2
     if ! command -v pm2 &> /dev/null; then
         log "Installing PM2..."
-        npm install -g pm2
+        sudo npm install -g pm2
     fi
     log "✓ PM2 $(pm2 --version) installed"
     
