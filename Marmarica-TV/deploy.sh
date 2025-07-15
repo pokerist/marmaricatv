@@ -127,6 +127,23 @@ install_dependencies() {
     fi
     log "✓ FFmpeg $(ffmpeg -version 2>&1 | head -n1 | cut -d' ' -f3) installed"
     
+    # Install Redis for session store
+    if ! command -v redis-server &> /dev/null; then
+        log "Installing Redis..."
+        sudo apt install -y redis-server
+        
+        # Configure Redis for production
+        sudo sed -i 's/^supervised no/supervised systemd/' /etc/redis/redis.conf
+        sudo sed -i 's/^# maxmemory <bytes>/maxmemory 256mb/' /etc/redis/redis.conf
+        sudo sed -i 's/^# maxmemory-policy noeviction/maxmemory-policy allkeys-lru/' /etc/redis/redis.conf
+        
+        # Enable and start Redis
+        sudo systemctl enable redis-server
+        sudo systemctl start redis-server
+        sudo systemctl restart redis-server
+    fi
+    log "✓ Redis $(redis-server --version | cut -d' ' -f3) installed"
+    
     # Install PM2
     if ! command -v pm2 &> /dev/null; then
         log "Installing PM2..."
@@ -203,6 +220,43 @@ MAX_SEGMENT_AGE=30000
 MAX_CHANNEL_DIR_SIZE=104857600
 HLS_LIST_SIZE=3
 ORPHANED_DIR_CLEANUP_AGE=3600000
+
+# Enhanced Transcoding Configuration
+# Concurrency limits optimized for 44-core / 40GB RAM system
+MAX_CONCURRENT_HIGH_QUALITY=15
+MAX_CONCURRENT_MEDIUM_QUALITY=25
+MAX_CONCURRENT_LOW_QUALITY=35
+MAX_CONCURRENT_COPY_MODE=45
+
+# Timing and delays
+STARTUP_STAGGER_DELAY=2000
+PROFILE_MIGRATION_STAGGER=3000
+BULK_OPERATION_STAGGER=1500
+
+# Resource monitoring thresholds
+CPU_WARNING_THRESHOLD=70
+CPU_CRITICAL_THRESHOLD=85
+RAM_WARNING_THRESHOLD=75
+RAM_CRITICAL_THRESHOLD=90
+
+# Dead source detection
+MAX_ERRORS_IN_COPY_MODE=5
+ERROR_WINDOW=30000
+OFFLINE_COOLDOWN=300000
+MAX_DEAD_SOURCE_RETRIES=3
+PERMANENT_OFFLINE_THRESHOLD=86400000
+
+# Redis Configuration (Session Store)
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_DB=0
+REDIS_TTL=43200
+REDIS_KEY_PREFIX=marmarica:sess:
+
+# Resource Monitoring
+MONITORING_INTERVAL=5000
+HISTORY_RETENTION_HOURS=24
+ALERT_COOLDOWN=300000
 EOF
     
     # Create client .env
@@ -220,7 +274,7 @@ REACT_APP_MAX_UPLOAD_SIZE=5242880
 # Access the frontend at: http://$SERVER_IP:5000
 EOF
     
-    log "✓ Environment files created"
+    log "✓ Environment files created with enhanced transcoding configuration"
 }
 
 # Setup directories

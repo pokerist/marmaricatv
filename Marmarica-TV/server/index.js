@@ -8,6 +8,12 @@ const fs = require('fs');
 const session = require('express-session');
 const cookieParser = require('cookie-parser');
 
+// Import enhanced services
+const { initializeSessionStore, createSessionMiddleware, cleanupSessionStore } = require('./services/session-store');
+const { initializeResourceMonitoring, cleanupResourceMonitoring } = require('./services/resource-monitor');
+const { initializeEnhancedTranscoding, cleanupEnhancedTranscoding } = require('./services/enhanced-transcoding');
+const { runMigrations } = require('./scripts/migrate-enhanced-transcoding');
+
 // Initialize express app
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -27,17 +33,8 @@ app.use(cookieParser());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-// Session configuration
-app.use(session({
-  secret: process.env.SESSION_SECRET || 'your-secret-key',
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    httpOnly: true,
-    secure: false, // Since we're not using HTTPS
-    maxAge: 12 * 60 * 60 * 1000 // 12 hours
-  }
-}));
+// Session configuration will be set up after session store initialization
+let sessionStore = null;
 
 // Serve uploaded files
 app.use('/uploads', express.static(path.join(__dirname, UPLOAD_DIR)));
@@ -152,6 +149,7 @@ const authRoutes = require('./routes/auth');
 const transcodingRoutes = require('./routes/transcoding');
 const transcodingProfilesRoutes = require('./routes/transcoding-profiles');
 const bulkOperationsRoutes = require('./routes/bulk-operations');
+const enhancedTranscodingRoutes = require('./routes/enhanced-transcoding');
 
 // Initialize auth table
 const { initializeAuthTable } = require('./controllers/auth');
@@ -169,6 +167,7 @@ app.use('/api/dashboard', isAuthenticated, dashboardRoutes);
 app.use('/api/transcoding', isAuthenticated, transcodingRoutes);
 app.use('/api/transcoding-profiles', isAuthenticated, transcodingProfilesRoutes);
 app.use('/api/bulk-operations', isAuthenticated, bulkOperationsRoutes);
+app.use('/api/enhanced-transcoding', isAuthenticated, enhancedTranscodingRoutes);
 app.use('/api/client', clientRoutes); // Client routes remain open
 
 // Health check route
@@ -273,6 +272,42 @@ function checkExpiredDevices() {
 // Initialize transcoding service
 const transcodingService = require('./services/transcoding');
 
+// Enhanced server initialization
+async function initializeEnhancedServices() {
+  try {
+    console.log('Initializing enhanced services...');
+    
+    // 1. Run database migrations
+    console.log('Running database migrations...');
+    await runMigrations();
+    
+    // 2. Initialize session store
+    console.log('Initializing session store...');
+    sessionStore = await initializeSessionStore();
+    
+    // Set up session middleware after store is initialized
+    app.use(createSessionMiddleware(sessionStore));
+    
+    // 3. Initialize resource monitoring
+    console.log('Initializing resource monitoring...');
+    await initializeResourceMonitoring();
+    
+    // 4. Initialize enhanced transcoding
+    console.log('Initializing enhanced transcoding...');
+    await initializeEnhancedTranscoding();
+    
+    // 5. Initialize legacy transcoding service
+    console.log('Initializing legacy transcoding service...');
+    await transcodingService.initializeTranscoding();
+    
+    console.log('All enhanced services initialized successfully!');
+    
+  } catch (error) {
+    console.error('Error initializing enhanced services:', error);
+    process.exit(1);
+  }
+}
+
 // Start server
 app.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`);
@@ -285,23 +320,49 @@ app.listen(PORT, async () => {
   // Set up a periodic check for expired devices (every hour)
   setInterval(checkExpiredDevices, 60 * 60 * 1000);
   
-  // Initialize transcoding service
-  await transcodingService.initializeTranscoding();
+  // Initialize enhanced services
+  await initializeEnhancedServices();
 });
 
-// Handle shutdown gracefully
-process.on('SIGINT', async () => {
-  console.log('Received SIGINT, shutting down gracefully...');
+// Enhanced shutdown handling
+async function gracefulShutdown() {
+  console.log('Received shutdown signal, shutting down gracefully...');
   
-  // Cleanup transcoding processes
-  await transcodingService.cleanup();
-  
-  // Close database connection
-  db.close((err) => {
-    if (err) {
-      console.error(err.message);
-    }
-    console.log('Database connection closed');
-    process.exit(0);
-  });
-});
+  try {
+    // 1. Cleanup enhanced transcoding processes
+    console.log('Cleaning up enhanced transcoding...');
+    await cleanupEnhancedTranscoding();
+    
+    // 2. Cleanup resource monitoring
+    console.log('Cleaning up resource monitoring...');
+    await cleanupResourceMonitoring();
+    
+    // 3. Cleanup session store
+    console.log('Cleaning up session store...');
+    await cleanupSessionStore();
+    
+    // 4. Cleanup legacy transcoding processes
+    console.log('Cleaning up legacy transcoding...');
+    await transcodingService.cleanup();
+    
+    // 5. Close database connection
+    console.log('Closing database connection...');
+    db.close((err) => {
+      if (err) {
+        console.error('Error closing database:', err.message);
+      } else {
+        console.log('Database connection closed');
+      }
+      console.log('Graceful shutdown completed');
+      process.exit(0);
+    });
+    
+  } catch (error) {
+    console.error('Error during graceful shutdown:', error);
+    process.exit(1);
+  }
+}
+
+// Handle shutdown signals
+process.on('SIGINT', gracefulShutdown);
+process.on('SIGTERM', gracefulShutdown);
