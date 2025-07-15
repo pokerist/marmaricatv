@@ -7,7 +7,14 @@ module.exports = {
         NODE_ENV: 'production',
         PORT: 5000,
         SESSION_SECRET: 'Qw73o9Gx#h!sZm42nXvtp8bLaT@E0RuQj'  // Same as in .env
-      }
+      },
+      error_file: './logs/err.log',
+      out_file: './logs/out.log',
+      log_file: './logs/combined.log',
+      time: true,
+      max_restarts: 10,
+      min_uptime: '10s',
+      max_memory_restart: '1G'
     },
     {
       name: 'marmarica-tv-client',
