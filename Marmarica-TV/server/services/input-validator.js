@@ -9,7 +9,7 @@ const M3U8_CONSTRAINTS = {
   ALLOWED_PROTOCOLS: ['http:', 'https:', 'udp:'],
   BLOCKED_DOMAINS: ['localhost', '127.0.0.1', '0.0.0.0', 'local'],
   ALLOWED_EXTENSIONS: ['.m3u8', '.ts', '.mp4', '.flv', '.m4s', '.mkv', '.avi', '.mov', '.webm'],
-  BLOCKED_EXTENSIONS: ['.exe', '.bat', '.sh', '.cmd', '.com', '.scr', '.pif', '.php', '.html', '.htm', '.js', '.css'],
+  BLOCKED_EXTENSIONS: ['.exe', '.bat', '.sh', '.cmd', '.scr', '.pif', '.php', '.html', '.htm', '.js', '.css'],
   ALLOWED_CATEGORIES: [
     'Religious', 'News', 'Movies', 'Family', 'Sports',
     'Entertainment', 'Kids', 'Documentary', 'Music', 'General'
