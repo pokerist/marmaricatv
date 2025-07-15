@@ -1,6 +1,6 @@
 const redis = require('redis');
 const session = require('express-session');
-const RedisStore = require('connect-redis')(session);
+const RedisStore = require('connect-redis');
 
 // Redis configuration
 const REDIS_CONFIG = {
@@ -43,18 +43,23 @@ class RedisSessionStore {
     try {
       console.log('Initializing Redis session store...');
       
-      // Create Redis client
-      this.client = redis.createClient({
-        host: REDIS_CONFIG.host,
-        port: REDIS_CONFIG.port,
-        password: REDIS_CONFIG.password,
-        db: REDIS_CONFIG.db,
-        keyPrefix: REDIS_CONFIG.keyPrefix,
-        retryDelayOnFailover: REDIS_CONFIG.retryDelayOnFailover,
-        enableOfflineQueue: REDIS_CONFIG.enableOfflineQueue,
-        maxRetriesPerRequest: REDIS_CONFIG.maxRetriesPerRequest,
-        lazyConnect: REDIS_CONFIG.lazyConnect
-      });
+      // Create Redis client with modern API
+      const clientOptions = {
+        socket: {
+          host: REDIS_CONFIG.host,
+          port: REDIS_CONFIG.port
+        }
+      };
+      
+      if (REDIS_CONFIG.password) {
+        clientOptions.password = REDIS_CONFIG.password;
+      }
+      
+      if (REDIS_CONFIG.db !== 0) {
+        clientOptions.database = REDIS_CONFIG.db;
+      }
+      
+      this.client = redis.createClient(clientOptions);
 
       // Set up event handlers
       this.setupEventHandlers();

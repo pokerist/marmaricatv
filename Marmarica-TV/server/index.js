@@ -8,11 +8,24 @@ const fs = require('fs');
 const session = require('express-session');
 const cookieParser = require('cookie-parser');
 
-// Import enhanced services
-const { initializeSessionStore, createSessionMiddleware, cleanupSessionStore } = require('./services/session-store');
-const { initializeResourceMonitoring, cleanupResourceMonitoring } = require('./services/resource-monitor');
-const { initializeEnhancedTranscoding, cleanupEnhancedTranscoding } = require('./services/enhanced-transcoding');
-const { runMigrations } = require('./scripts/migrate-enhanced-transcoding');
+// Import enhanced services with fallback
+let enhancedServices = {
+  sessionStore: null,
+  resourceMonitoring: null,
+  enhancedTranscoding: null,
+  migrations: null
+};
+
+// Try to load enhanced services
+try {
+  enhancedServices.sessionStore = require('./services/session-store');
+  enhancedServices.resourceMonitoring = require('./services/resource-monitor');
+  enhancedServices.enhancedTranscoding = require('./services/enhanced-transcoding');
+  enhancedServices.migrations = require('./scripts/migrate-enhanced-transcoding');
+  console.log('Enhanced services loaded successfully');
+} catch (error) {
+  console.warn('Enhanced services not available, falling back to basic functionality:', error.message);
+}
 
 // Initialize express app
 const app = express();
@@ -272,39 +285,92 @@ function checkExpiredDevices() {
 // Initialize transcoding service
 const transcodingService = require('./services/transcoding');
 
-// Enhanced server initialization
+// Enhanced server initialization with fallbacks
 async function initializeEnhancedServices() {
   try {
-    console.log('Initializing enhanced services...');
+    console.log('Initializing services...');
     
-    // 1. Run database migrations
-    console.log('Running database migrations...');
-    await runMigrations();
+    // 1. Run database migrations (if available)
+    if (enhancedServices.migrations) {
+      try {
+        console.log('Running database migrations...');
+        await enhancedServices.migrations.runMigrations();
+        console.log('Database migrations completed');
+      } catch (error) {
+        console.warn('Database migrations failed, continuing without enhanced tables:', error.message);
+      }
+    }
     
-    // 2. Initialize session store
-    console.log('Initializing session store...');
-    sessionStore = await initializeSessionStore();
+    // 2. Initialize session store (if available)
+    if (enhancedServices.sessionStore) {
+      try {
+        console.log('Initializing session store...');
+        sessionStore = await enhancedServices.sessionStore.initializeSessionStore();
+        
+        // Set up session middleware after store is initialized
+        app.use(enhancedServices.sessionStore.createSessionMiddleware(sessionStore));
+        console.log('Session store initialized');
+      } catch (error) {
+        console.warn('Session store initialization failed, using basic session:', error.message);
+        // Fallback to basic session
+        app.use(session({
+          secret: process.env.SESSION_SECRET || 'your-secret-key',
+          resave: false,
+          saveUninitialized: false,
+          cookie: {
+            httpOnly: true,
+            secure: false,
+            maxAge: 12 * 60 * 60 * 1000 // 12 hours
+          }
+        }));
+      }
+    } else {
+      // Fallback to basic session
+      console.log('Using basic session store');
+      app.use(session({
+        secret: process.env.SESSION_SECRET || 'your-secret-key',
+        resave: false,
+        saveUninitialized: false,
+        cookie: {
+          httpOnly: true,
+          secure: false,
+          maxAge: 12 * 60 * 60 * 1000 // 12 hours
+        }
+      }));
+    }
     
-    // Set up session middleware after store is initialized
-    app.use(createSessionMiddleware(sessionStore));
+    // 3. Initialize resource monitoring (if available)
+    if (enhancedServices.resourceMonitoring) {
+      try {
+        console.log('Initializing resource monitoring...');
+        await enhancedServices.resourceMonitoring.initializeResourceMonitoring();
+        console.log('Resource monitoring initialized');
+      } catch (error) {
+        console.warn('Resource monitoring initialization failed:', error.message);
+      }
+    }
     
-    // 3. Initialize resource monitoring
-    console.log('Initializing resource monitoring...');
-    await initializeResourceMonitoring();
-    
-    // 4. Initialize enhanced transcoding
-    console.log('Initializing enhanced transcoding...');
-    await initializeEnhancedTranscoding();
+    // 4. Initialize enhanced transcoding (if available)
+    if (enhancedServices.enhancedTranscoding) {
+      try {
+        console.log('Initializing enhanced transcoding...');
+        await enhancedServices.enhancedTranscoding.initializeEnhancedTranscoding();
+        console.log('Enhanced transcoding initialized');
+      } catch (error) {
+        console.warn('Enhanced transcoding initialization failed:', error.message);
+      }
+    }
     
     // 5. Initialize legacy transcoding service
     console.log('Initializing legacy transcoding service...');
     await transcodingService.initializeTranscoding();
     
-    console.log('All enhanced services initialized successfully!');
+    console.log('All services initialized successfully!');
     
   } catch (error) {
-    console.error('Error initializing enhanced services:', error);
-    process.exit(1);
+    console.error('Error initializing services:', error);
+    // Don't exit, continue with basic functionality
+    console.log('Continuing with basic functionality...');
   }
 }
 
@@ -324,26 +390,48 @@ app.listen(PORT, async () => {
   await initializeEnhancedServices();
 });
 
-// Enhanced shutdown handling
+// Enhanced shutdown handling with fallbacks
 async function gracefulShutdown() {
   console.log('Received shutdown signal, shutting down gracefully...');
   
   try {
-    // 1. Cleanup enhanced transcoding processes
-    console.log('Cleaning up enhanced transcoding...');
-    await cleanupEnhancedTranscoding();
+    // 1. Cleanup enhanced transcoding processes (if available)
+    if (enhancedServices.enhancedTranscoding) {
+      try {
+        console.log('Cleaning up enhanced transcoding...');
+        await enhancedServices.enhancedTranscoding.cleanupEnhancedTranscoding();
+      } catch (error) {
+        console.warn('Enhanced transcoding cleanup failed:', error.message);
+      }
+    }
     
-    // 2. Cleanup resource monitoring
-    console.log('Cleaning up resource monitoring...');
-    await cleanupResourceMonitoring();
+    // 2. Cleanup resource monitoring (if available)
+    if (enhancedServices.resourceMonitoring) {
+      try {
+        console.log('Cleaning up resource monitoring...');
+        await enhancedServices.resourceMonitoring.cleanupResourceMonitoring();
+      } catch (error) {
+        console.warn('Resource monitoring cleanup failed:', error.message);
+      }
+    }
     
-    // 3. Cleanup session store
-    console.log('Cleaning up session store...');
-    await cleanupSessionStore();
+    // 3. Cleanup session store (if available)
+    if (enhancedServices.sessionStore && sessionStore) {
+      try {
+        console.log('Cleaning up session store...');
+        await enhancedServices.sessionStore.cleanupSessionStore();
+      } catch (error) {
+        console.warn('Session store cleanup failed:', error.message);
+      }
+    }
     
     // 4. Cleanup legacy transcoding processes
-    console.log('Cleaning up legacy transcoding...');
-    await transcodingService.cleanup();
+    try {
+      console.log('Cleaning up legacy transcoding...');
+      await transcodingService.cleanup();
+    } catch (error) {
+      console.warn('Legacy transcoding cleanup failed:', error.message);
+    }
     
     // 5. Close database connection
     console.log('Closing database connection...');
