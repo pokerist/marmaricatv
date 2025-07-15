@@ -361,9 +361,10 @@ const performBulkImport = async (validChannels) => {
 /**
  * Starts transcoding for all channels
  * @param {Array} channelIds - Array of channel IDs to transcode (optional, defaults to all)
+ * @param {number} profileId - Optional profile ID to assign to all channels
  * @returns {Promise<Object>} - Transcoding operation results
  */
-const performBulkTranscoding = async (channelIds = null) => {
+const performBulkTranscoding = async (channelIds = null, profileId = null) => {
   try {
     // Get channels to transcode
     const channels = await new Promise((resolve, reject) => {
@@ -401,7 +402,7 @@ const performBulkTranscoding = async (channelIds = null) => {
     const bulkOperationId = await createBulkOperation('bulk_transcoding', channels.length);
     
     // Log the start of bulk transcoding
-    logAction('bulk_transcoding_started', `Started bulk transcoding of ${channels.length} channels`);
+    logAction('bulk_transcoding_started', `Started bulk transcoding of ${channels.length} channels${profileId ? ` with profile ID: ${profileId}` : ''}`);
     
     const results = {
       total: channels.length,
@@ -413,23 +414,31 @@ const performBulkTranscoding = async (channelIds = null) => {
     // Process each channel
     for (const channel of channels) {
       try {
-        // Enable transcoding for the channel
+        // Enable transcoding for the channel and optionally set profile
         await new Promise((resolve, reject) => {
           const now = new Date().toISOString();
-          db.run(
-            'UPDATE channels SET transcoding_enabled = 1, updated_at = ? WHERE id = ?',
-            [now, channel.id],
-            (err) => {
-              if (err) {
-                reject(err);
-              } else {
-                resolve();
-              }
+          let sql = 'UPDATE channels SET transcoding_enabled = 1, updated_at = ?';
+          let params = [now];
+          
+          // If profile ID is specified, assign it to the channel
+          if (profileId) {
+            sql += ', transcoding_profile_id = ?';
+            params.push(profileId);
+          }
+          
+          sql += ' WHERE id = ?';
+          params.push(channel.id);
+          
+          db.run(sql, params, (err) => {
+            if (err) {
+              reject(err);
+            } else {
+              resolve();
             }
-          );
+          });
         });
         
-        // Start transcoding
+        // Start transcoding (will use the assigned profile or default)
         await transcodingService.startTranscoding(channel.id, channel.url, channel.name);
         
         results.processed++;

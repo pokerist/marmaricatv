@@ -313,7 +313,8 @@ class DatabaseInitializer {
         gop_size: 30,
         keyint_min: 30,
         hls_time: 6,
-        hls_list_size: 3,
+        hls_list_size: 4,
+        additional_params: '-hls_flags delete_segments+program_date_time+independent_segments+split_by_time -hls_delete_threshold 1',
         is_default: 1
       },
       {
@@ -329,7 +330,8 @@ class DatabaseInitializer {
         gop_size: 50,
         keyint_min: 50,
         hls_time: 4,
-        hls_list_size: 3,
+        hls_list_size: 4,
+        additional_params: '-hls_flags delete_segments+program_date_time+independent_segments+split_by_time -hls_delete_threshold 1',
         is_default: 0
       },
       {
@@ -346,6 +348,7 @@ class DatabaseInitializer {
         keyint_min: 60,
         hls_time: 4,
         hls_list_size: 4,
+        additional_params: '-hls_flags delete_segments+program_date_time+independent_segments+split_by_time -hls_delete_threshold 1',
         is_default: 0
       }
     ];
@@ -361,15 +364,15 @@ class DatabaseInitializer {
         INSERT OR IGNORE INTO transcoding_profiles (
           name, description, video_codec, audio_codec, video_bitrate, audio_bitrate,
           resolution, preset, tune, gop_size, keyint_min, hls_time, hls_list_size,
-          is_default, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          additional_params, is_default, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `;
       
       this.db.run(sql, [
         profile.name, profile.description, profile.video_codec, profile.audio_codec,
         profile.video_bitrate, profile.audio_bitrate, profile.resolution, profile.preset,
         profile.tune, profile.gop_size, profile.keyint_min, profile.hls_time,
-        profile.hls_list_size, profile.is_default, timestamp, timestamp
+        profile.hls_list_size, profile.additional_params, profile.is_default, timestamp, timestamp
       ], function(err) {
         if (err) {
           log.error(`Failed to insert profile ${profile.name}: ${err.message}`);

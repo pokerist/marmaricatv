@@ -110,36 +110,162 @@ const createOutputDirectory = (channelId) => {
   return outputDir;
 };
 
-// Generate FFmpeg command for LL-HLS transcoding with enhanced cleanup
-const generateFFmpegCommand = (inputUrl, channelId) => {
-  const outputDir = createOutputDirectory(channelId);
-  const outputPath = path.join(outputDir, 'output.m3u8');
-  const segmentPath = path.join(outputDir, 'output_%03d.m4s');
+// Helper function to get transcoding profile
+const getTranscodingProfile = (profileId) => {
+  return new Promise((resolve, reject) => {
+    if (!profileId) {
+      // Get default profile if no ID provided
+      db.get('SELECT * FROM transcoding_profiles WHERE is_default = 1', (err, row) => {
+        if (err) {
+          reject(err);
+        } else if (row) {
+          resolve(row);
+        } else {
+          reject(new Error('No default transcoding profile found'));
+        }
+      });
+    } else {
+      // Get specific profile
+      db.get('SELECT * FROM transcoding_profiles WHERE id = ?', [profileId], (err, row) => {
+        if (err) {
+          reject(err);
+        } else if (row) {
+          resolve(row);
+        } else {
+          reject(new Error(`Transcoding profile with ID ${profileId} not found`));
+        }
+      });
+    }
+  });
+};
 
-  const command = [
-    '-i', inputUrl,
-    '-c:v', 'libx264',
-    '-preset', 'veryfast',
-    '-tune', 'zerolatency',
-    '-g', '50',                     // Keyframe every 2 seconds (for 25 fps input, adjust as needed)
-    '-keyint_min', '50',
-    '-sc_threshold', '0',
-    '-c:a', 'aac',
-    '-b:a', '128k',
-    '-f', 'hls',
-    '-hls_time', '4',               // 4 second segments for classic HLS
-    '-hls_playlist_type', 'event',
-    '-hls_flags', 'independent_segments+delete_segments+program_date_time',
-    '-hls_segment_type', 'mpegts',  // <-- KEY CHANGE!
-    '-hls_segment_filename', segmentPath,
-    '-hls_start_number_source', 'epoch',
-    '-hls_list_size', Math.max(HLS_LIST_SIZE, 4).toString(),
-    '-hls_delete_threshold', '1',
-    outputPath
+// Helper function to ensure mandatory cleanup flags are present
+const ensureMandatoryCleanupFlags = (command) => {
+  const mandatoryFlags = [
+    'delete_segments',
+    'program_date_time',
+    'independent_segments',
+    'split_by_time'
   ];
 
+  // Find the -hls_flags parameter
+  const hlsFlagsIndex = command.findIndex(arg => arg === '-hls_flags');
+  
+  if (hlsFlagsIndex !== -1 && hlsFlagsIndex + 1 < command.length) {
+    const currentFlags = command[hlsFlagsIndex + 1].split('+');
+    const missingFlags = mandatoryFlags.filter(flag => !currentFlags.includes(flag));
+    
+    if (missingFlags.length > 0) {
+      // Add missing flags
+      command[hlsFlagsIndex + 1] = [...currentFlags, ...missingFlags].join('+');
+      console.log(`Added missing mandatory HLS flags: ${missingFlags.join('+')}`);
+    }
+  } else {
+    // Add -hls_flags if not present
+    const hlsTimeIndex = command.findIndex(arg => arg === '-hls_time');
+    if (hlsTimeIndex !== -1) {
+      command.splice(hlsTimeIndex, 0, '-hls_flags', mandatoryFlags.join('+'));
+    } else {
+      command.push('-hls_flags', mandatoryFlags.join('+'));
+    }
+    console.log('Added mandatory HLS flags to command');
+  }
 
-  return { command, outputPath };
+  // Ensure -hls_delete_threshold is present
+  const deleteThresholdIndex = command.findIndex(arg => arg === '-hls_delete_threshold');
+  if (deleteThresholdIndex === -1) {
+    command.push('-hls_delete_threshold', '1');
+    console.log('Added mandatory hls_delete_threshold to command');
+  }
+
+  return command;
+};
+
+// Generate FFmpeg command using transcoding profile with mandatory cleanup enforcement
+const generateFFmpegCommand = async (inputUrl, channelId, profileId = null) => {
+  try {
+    const outputDir = createOutputDirectory(channelId);
+    const outputPath = path.join(outputDir, 'output.m3u8');
+    const segmentPath = path.join(outputDir, 'output_%d.m4s'); // Use %d for proper cleanup
+
+    // Get transcoding profile
+    const profile = await getTranscodingProfile(profileId);
+    console.log(`Using transcoding profile: ${profile.name} (ID: ${profile.id})`);
+
+    // Base command structure
+    let command = [
+      '-i', inputUrl,
+      '-c:v', profile.video_codec,
+      '-preset', profile.preset,
+      '-g', profile.gop_size.toString(),
+      '-keyint_min', profile.keyint_min.toString(),
+      '-sc_threshold', '0',
+      '-c:a', profile.audio_codec,
+      '-b:a', profile.audio_bitrate,
+      '-f', 'hls',
+      '-hls_time', profile.hls_time.toString(),
+      '-hls_playlist_type', 'event',
+      '-hls_segment_type', 'mpegts',
+      '-hls_segment_filename', segmentPath,
+      '-hls_start_number_source', 'epoch',
+      '-hls_list_size', Math.max(profile.hls_list_size, 4).toString(),
+      outputPath
+    ];
+
+    // Add video bitrate if specified
+    if (profile.video_bitrate && profile.video_bitrate !== 'original') {
+      const videoBitrateIndex = command.findIndex(arg => arg === '-c:v');
+      command.splice(videoBitrateIndex + 2, 0, '-b:v', profile.video_bitrate);
+    }
+
+    // Add tune parameter if specified
+    if (profile.tune) {
+      const presetIndex = command.findIndex(arg => arg === '-preset');
+      command.splice(presetIndex + 2, 0, '-tune', profile.tune);
+    }
+
+    // Add resolution scaling if specified
+    if (profile.resolution && profile.resolution !== 'original') {
+      let scaleFilter = '';
+      switch (profile.resolution) {
+        case '720p':
+          scaleFilter = 'scale=1280:720';
+          break;
+        case '1080p':
+          scaleFilter = 'scale=1920:1080';
+          break;
+        case '480p':
+          scaleFilter = 'scale=854:480';
+          break;
+        default:
+          if (profile.resolution.includes('x')) {
+            scaleFilter = `scale=${profile.resolution.replace('x', ':')}`;
+          }
+      }
+      
+      if (scaleFilter) {
+        const formatIndex = command.findIndex(arg => arg === '-f');
+        command.splice(formatIndex, 0, '-vf', scaleFilter);
+      }
+    }
+
+    // Add additional parameters from profile
+    if (profile.additional_params) {
+      const additionalArgs = profile.additional_params.split(' ').filter(arg => arg.trim());
+      const outputIndex = command.length - 1; // Before output path
+      command.splice(outputIndex, 0, ...additionalArgs);
+    }
+
+    // Ensure mandatory cleanup flags are present (this is non-negotiable)
+    command = ensureMandatoryCleanupFlags(command);
+
+    console.log(`Generated FFmpeg command for profile ${profile.name}`);
+    return { command, outputPath, profile };
+
+  } catch (error) {
+    console.error('Error generating FFmpeg command:', error);
+    throw error;
+  }
 };
 
 // Start transcoding for a channel
@@ -158,8 +284,19 @@ const startTranscoding = async (channelId, inputUrl, channelName) => {
     // Update channel status to starting
     await updateChannelStatus(channelId, 'starting');
 
-    // Generate FFmpeg command
-    const { command, outputPath } = generateFFmpegCommand(inputUrl, channelId);
+    // Get channel's transcoding profile
+    const channel = await new Promise((resolve, reject) => {
+      db.get('SELECT transcoding_profile_id FROM channels WHERE id = ?', [channelId], (err, row) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(row);
+        }
+      });
+    });
+
+    // Generate FFmpeg command with profile
+    const { command, outputPath, profile } = await generateFFmpegCommand(inputUrl, channelId, channel?.transcoding_profile_id);
     console.log(`FFmpeg command: ${FFMPEG_PATH} ${command.join(' ')}`);
 
     // Create transcoding job record
@@ -200,13 +337,14 @@ const startTranscoding = async (channelId, inputUrl, channelName) => {
       throw error;
     }
 
-    console.log(`Started FFmpeg process with PID: ${pid}`);
+    console.log(`Started FFmpeg process with PID: ${pid} using profile: ${profile.name}`);
 
     // Store process reference
     activeProcesses.set(channelId, {
       process: ffmpegProcess,
       jobId: jobId,
-      channelName: channelName
+      channelName: channelName,
+      profileId: profile.id
     });
 
     // Update job with PID
@@ -236,7 +374,7 @@ const startTranscoding = async (channelId, inputUrl, channelName) => {
         // Process completed successfully
         await updateJobStatus(jobId, 'completed');
         await updateChannelStatus(channelId, 'active', `${SERVER_BASE_URL}/hls_stream/channel_${channelId}/output.m3u8`);
-        logAction('transcoding_completed', `Transcoding completed for channel: ${channelName}`);
+        logAction('transcoding_completed', `Transcoding completed for channel: ${channelName} using profile: ${profile.name}`);
       } else {
         // Process failed
         await updateJobStatus(jobId, 'failed', `Process exited with code ${code}`);
@@ -261,11 +399,11 @@ const startTranscoding = async (channelId, inputUrl, channelName) => {
     setTimeout(async () => {
       if (activeProcesses.has(channelId)) {
         await updateChannelStatus(channelId, 'active', `${SERVER_BASE_URL}/hls_stream/channel_${channelId}/output.m3u8`);
-        logAction('transcoding_started', `Transcoding started for channel: ${channelName}`);
+        logAction('transcoding_started', `Transcoding started for channel: ${channelName} using profile: ${profile.name}`);
       }
     }, 2000);
 
-    return { success: true, jobId, pid };
+    return { success: true, jobId, pid, profile: profile.name };
 
   } catch (error) {
     console.error(`Error starting transcoding for channel ${channelId}:`, error);
