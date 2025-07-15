@@ -124,25 +124,12 @@ Ubuntu 20.04+ (or similar Linux distribution)
 
 3. **Database Setup**
    ```bash
-   # Initialize database tables
+   # Initialize complete database schema
    cd server
-   node index.js
-   # Wait for "Database tables initialized" message, then Ctrl+C
+   node scripts/initialize-database.js
    ```
 
-4. **Run Database Migrations**
-   ```bash
-   # Add transcoding support
-   node scripts/add-transcoding-support.js
-   
-   # Add channel ordering
-   node scripts/add-channel-order.js
-   
-   # Add transcoding state tracking
-   node scripts/add-transcoding-state-tracking.js
-   ```
-
-5. **Create Admin User**
+4. **Create Admin User**
    ```bash
    # Generate admin credentials
    node scripts/manage-admin.js create admin
@@ -464,10 +451,10 @@ pm2 restart marmarica-tv-server
 
 After code deployment, the following actions must be performed on the production server:
 
-### Database Migration
+### Database Initialization
 ```bash
 cd server
-node scripts/add-transcoding-state-tracking.js
+node scripts/initialize-database.js
 ```
 
 ### Environment Setup

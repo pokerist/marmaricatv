@@ -154,130 +154,113 @@ REACT_APP_MAX_UPLOAD_SIZE=5242880
 # Navigate to server directory
 cd ../server
 
-# Initialize database (this creates the database.sqlite file)
-node index.js
-# Wait for these messages:
-# "Connected to the SQLite database"
-# "Devices table initialized"
-# "Channels table initialized"
-# "News table initialized"
-# "Actions table initialized"
-# "Uploads directory created"
-# "Database tables initialized"
-# Then press Ctrl+C to stop
+# Initialize complete database schema with unified script
+node scripts/initialize-database.js
 ```
 
-### Step 5: Database Migrations
-
-Run the following migration scripts in the exact order shown below. Each migration builds upon the previous one:
-
-```bash
-# 1. Original Transcoding Support (Foundation)
-node scripts/add-transcoding-support.js
-```
 **Expected Output:**
 ```
-✓ Added transcoding_enabled column to channels table
-✓ Added transcoded_url column to channels table  
-✓ Added transcoding_status column to channels table
-✓ Created transcoding_jobs table
-Database migration completed successfully
-```
+🚀 Starting Marmarica TV Database Initialization...
 
-**Verification:**
-```bash
-sqlite3 database.sqlite "PRAGMA table_info(channels);" | grep -E "(transcoding_enabled|transcoded_url|transcoding_status)"
-sqlite3 database.sqlite "SELECT name FROM sqlite_master WHERE type='table' AND name='transcoding_jobs';"
-```
+📊 Database Connection
+✓ Connected to SQLite database
 
-```bash
-# 2. Channel Ordering Support
-node scripts/add-channel-order.js
-```
-**Expected Output:**
-```
-✓ Added order_index column to channels table
-✓ Updated existing channels with order_index values
-Database migration completed successfully
-```
+📋 Base Tables
+✓ Created table devices
+✓ Created table channels
+✓ Created table news
+✓ Created table actions
+✓ Created table admins
 
-**Verification:**
-```bash
-sqlite3 database.sqlite "PRAGMA table_info(channels);" | grep "order_index"
-```
+🔧 Transcoding Support
+✓ Added column transcoding_enabled to channels
+✓ Added column transcoded_url to channels
+✓ Added column transcoding_status to channels
+✓ Created table transcoding_jobs
 
-```bash
-# 3. Phase 1: Transcoding State Tracking
-node scripts/add-transcoding-state-tracking.js
-```
-**Expected Output:**
-```
-Adding transcoding state tracking to database...
-✓ Added last_transcoding_state column to channels table
+📊 Channel Ordering
+✓ Added column order_index to channels
+✓ Updated order_index for existing channels
+✓ Created index idx_channels_order
+
+🔄 State Tracking
+✓ Added column last_transcoding_state to channels
 ✓ Updated last_transcoding_state for existing channels
-Database migration completed!
-Database connection closed
+
+📦 Bulk Operations Support
+✓ Created table bulk_operations
+✓ Created table import_logs
+✓ Created index idx_bulk_operations_status
+✓ Created index idx_import_logs_bulk_operation
+✓ Created index idx_import_logs_status
+
+📁 Directory Setup
+✓ Created uploads directory
+✓ HLS stream directory exists
+
+✅ Database Verification
+✓ Database integrity check passed
+✓ All required tables and columns verified
+
+📊 Summary
+✓ Successful operations: 20
+⚠ Warnings: 0
+❌ Errors: 0
+
+🎉 Database initialization completed successfully!
+   Ready to start the application.
+
+Next steps:
+  1. Create admin user: node scripts/manage-admin.js create admin
+  2. Start the server: node index.js
+  3. Or use PM2: pm2 start ecosystem.config.js
 ```
 
 **Verification:**
 ```bash
-sqlite3 database.sqlite "PRAGMA table_info(channels);" | grep "last_transcoding_state"
-# Should show: last_transcoding_state TEXT DEFAULT 'idle'
-
-# Verify data was updated correctly
-sqlite3 database.sqlite "SELECT COUNT(*) FROM channels WHERE last_transcoding_state IS NOT NULL;"
-# Should return the number of channels in your database
-```
-
-```bash
-# 4. Phase 2A: Bulk Operations Support
-node scripts/add-bulk-operations-support.js
-```
-**Expected Output:**
-```
-✓ Created bulk_operations table
-✓ Created import_logs table
-✓ Created bulk_operations status index
-✓ Created import_logs bulk_operation index
-✓ Created import_logs status index
-Database migration completed successfully
-```
-
-**Verification:**
-```bash
-sqlite3 database.sqlite "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('bulk_operations', 'import_logs');"
-```
-
-#### Migration Troubleshooting
-
-If any migration fails:
-
-**For "column already exists" errors:**
-```bash
-# Check if column exists
-sqlite3 database.sqlite "PRAGMA table_info(channels);"
-# If column exists, the migration was already run successfully
-```
-
-**For "table already exists" errors:**
-```bash
-# Check if table exists
+# Verify all tables exist
 sqlite3 database.sqlite "SELECT name FROM sqlite_master WHERE type='table';"
-# If table exists, the migration was already run successfully
-```
+# Should return: devices, channels, news, actions, admins, transcoding_jobs, bulk_operations, import_logs
 
-**For database corruption:**
-```bash
-# Backup current database
-cp database.sqlite database.backup.sqlite
+# Verify channels table has all required columns
+sqlite3 database.sqlite "PRAGMA table_info(channels);"
+# Should include: transcoding_enabled, transcoded_url, transcoding_status, order_index, last_transcoding_state
 
 # Check database integrity
 sqlite3 database.sqlite "PRAGMA integrity_check;"
-
-# If corrupted, restore from backup or reinitialize
+# Should return: ok
 ```
 
-### Step 6: Admin User Creation
+#### Troubleshooting Database Initialization
+
+**If the script fails:**
+```bash
+# Check database file permissions
+ls -la database.sqlite
+chmod 664 database.sqlite
+
+# Remove corrupted database and retry
+rm database.sqlite
+node scripts/initialize-database.js
+```
+
+**If you see warnings about existing tables/columns:**
+- This is normal and expected - the script is idempotent
+- Warnings mean the database already has some components
+- The script will skip existing items and continue
+
+**For permission errors:**
+```bash
+# Ensure uploads directory is writable
+chmod 755 uploads
+
+# Ensure HLS directory exists and is writable
+sudo mkdir -p /var/www/html/hls_stream
+sudo chown -R $USER:$USER /var/www/html/hls_stream
+sudo chmod -R 755 /var/www/html/hls_stream
+```
+
+### Step 5: Admin User Creation
 
 ```bash
 # Create admin user with random password
@@ -290,7 +273,7 @@ node scripts/manage-admin.js set-password admin Smart@2025
 cat admin-credentials.txt
 ```
 
-### Step 7: Storage Configuration
+### Step 6: Storage Configuration
 
 ```bash
 # Create HLS output directory
@@ -307,7 +290,7 @@ ls -la uploads/
 ls -la /var/www/html/hls_stream/
 ```
 
-### Step 8: Build Frontend
+### Step 7: Build Frontend
 
 ```bash
 # Navigate to client directory
@@ -320,7 +303,7 @@ npm run build
 ls -la build/
 ```
 
-### Step 9: PM2 Configuration
+### Step 8: PM2 Configuration
 
 ```bash
 # Navigate to root directory
@@ -354,7 +337,7 @@ module.exports = {
 };
 ```
 
-### Step 10: Start Application
+### Step 9: Start Application
 
 ```bash
 # Create logs directory
