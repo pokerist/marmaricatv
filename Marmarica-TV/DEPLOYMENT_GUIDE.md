@@ -212,14 +212,21 @@ node scripts/add-transcoding-state-tracking.js
 ```
 **Expected Output:**
 ```
+Adding transcoding state tracking to database...
 ✓ Added last_transcoding_state column to channels table
 ✓ Updated last_transcoding_state for existing channels
-Database migration completed successfully
+Database migration completed!
+Database connection closed
 ```
 
 **Verification:**
 ```bash
 sqlite3 database.sqlite "PRAGMA table_info(channels);" | grep "last_transcoding_state"
+# Should show: last_transcoding_state TEXT DEFAULT 'idle'
+
+# Verify data was updated correctly
+sqlite3 database.sqlite "SELECT COUNT(*) FROM channels WHERE last_transcoding_state IS NOT NULL;"
+# Should return the number of channels in your database
 ```
 
 ```bash
