@@ -143,9 +143,9 @@ SESSION_SECRET=your-very-secure-random-string-change-this
 DATABASE_PATH=./database.sqlite
 
 # CORS and API URLs
-CORS_ORIGIN=http://192.168.100.232:3000
-API_URL=http://192.168.100.232:5000
-SERVER_BASE_URL=http://192.168.100.232:5000
+CORS_ORIGIN=http://192.168.1.15:3000
+API_URL=http://192.168.1.15:5000
+SERVER_BASE_URL=http://192.168.1.15:5000
 
 # File Upload
 UPLOAD_DIR=uploads
@@ -174,12 +174,12 @@ nano .env
 Add the following configuration:
 ```env
 # API Configuration
-REACT_APP_API_URL=http://192.168.100.232:5000/api
+REACT_APP_API_URL=http://192.168.1.15:5000/api
 REACT_APP_API_TIMEOUT=8000
 REACT_APP_API_RETRIES=2
 
 # Upload Configuration
-REACT_APP_UPLOADS_URL=http://192.168.100.232:5000/uploads
+REACT_APP_UPLOADS_URL=http://192.168.1.15:5000/uploads
 REACT_APP_MAX_UPLOAD_SIZE=5242880
 ```
 
