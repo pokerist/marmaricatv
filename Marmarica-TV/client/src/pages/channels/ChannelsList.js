@@ -5,7 +5,7 @@ import {
 } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
 import { FaPlus, FaSearch, FaEdit, FaTrash, FaFilter, FaArrowUp, FaArrowDown, FaPlay, FaStop, FaSync, FaUpload } from 'react-icons/fa';
-import { channelsAPI, transcodingAPI } from '../../services/api';
+import { channelsAPI, transcodingAPI, bulkOperationsAPI } from '../../services/api';
 import { toast } from 'react-toastify';
 import M3U8Upload from '../../components/M3U8Upload';
 import BulkTranscodingModal from '../../components/BulkTranscodingModal';
@@ -28,6 +28,7 @@ const ChannelsList = () => {
   const [showDeleteAllChannels, setShowDeleteAllChannels] = useState(false);
   const [transcodingActions, setTranscodingActions] = useState(new Set());
   const [pollingInterval, setPollingInterval] = useState(null);
+  const [bulkStopLoading, setBulkStopLoading] = useState(false);
 
   // Handle M3U8 import success
   const handleImportSuccess = (results) => {
@@ -288,6 +289,66 @@ const ChannelsList = () => {
     }
   };
 
+  // Handle bulk stop transcoding
+  const handleBulkStopTranscoding = async () => {
+    const activeChannels = channels.filter(c => 
+      c.transcoding_enabled && 
+      ['active', 'starting', 'running'].includes(c.transcoding_status)
+    );
+
+    if (activeChannels.length === 0) {
+      toast.info('No active transcoding channels to stop');
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Are you sure you want to stop transcoding for ${activeChannels.length} active channel${activeChannels.length > 1 ? 's' : ''}?\n\n` +
+      `This will:\n` +
+      `• Stop all active transcoding processes\n` +
+      `• Disable transcoding for all channels\n` +
+      `• This action cannot be undone\n\n` +
+      `Channels affected: ${activeChannels.map(c => c.name).join(', ')}`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setBulkStopLoading(true);
+      
+      // Optimistically update UI
+      setChannels(prevChannels => 
+        prevChannels.map(channel => 
+          activeChannels.find(ac => ac.id === channel.id)
+            ? { ...channel, transcoding_status: 'stopping' }
+            : channel
+        )
+      );
+
+      const response = await bulkOperationsAPI.stopBulkTranscoding();
+      
+      if (response.data.success) {
+        const results = response.data.data;
+        toast.success(`Successfully stopped transcoding for ${results.processed} channels`);
+        
+        if (results.failed > 0) {
+          toast.warning(`${results.failed} channels failed to stop transcoding`);
+        }
+      } else {
+        toast.error('Failed to stop bulk transcoding');
+      }
+      
+      // Refresh to get actual status
+      setTimeout(fetchChannels, 1000);
+    } catch (error) {
+      console.error('Error stopping bulk transcoding:', error);
+      toast.error('Failed to stop bulk transcoding');
+      // Revert optimistic update on error
+      fetchChannels();
+    } finally {
+      setBulkStopLoading(false);
+    }
+  };
+
   // Filter channels by search term and filters (client-side)
   const filteredChannels = channels.filter(channel => {
     // Text search
@@ -357,6 +418,23 @@ const ChannelsList = () => {
             onClick={() => setShowBulkTranscoding(true)}
           >
             <FaPlay className="me-2" /> Bulk Transcoding
+          </Button>
+          <Button 
+            variant="danger" 
+            className="me-2" 
+            onClick={handleBulkStopTranscoding}
+            disabled={bulkStopLoading || channels.filter(c => c.transcoding_enabled && ['active', 'starting', 'running'].includes(c.transcoding_status)).length === 0}
+          >
+            {bulkStopLoading ? (
+              <>
+                <div className="spinner-border spinner-border-sm me-2" role="status" />
+                Stopping...
+              </>
+            ) : (
+              <>
+                <FaStop className="me-2" /> Stop All Transcoding ({channels.filter(c => c.transcoding_enabled && ['active', 'starting', 'running'].includes(c.transcoding_status)).length})
+              </>
+            )}
           </Button>
           <Button 
             variant="success" 

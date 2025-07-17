@@ -288,8 +288,10 @@ class DatabaseInitializer {
         manifest_filename TEXT DEFAULT 'output.m3u8',
         additional_params TEXT,
         is_default BOOLEAN DEFAULT 0,
+        template_id INTEGER,
         created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (template_id) REFERENCES profile_templates(id)
       )
     `);
 
@@ -751,8 +753,8 @@ class DatabaseInitializer {
           name, description, video_codec, audio_codec, video_bitrate, audio_bitrate,
           resolution, preset, tune, gop_size, keyint_min, hls_time, hls_list_size,
           hls_segment_type, hls_flags, hls_segment_filename, manifest_filename,
-          additional_params, is_default, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          additional_params, is_default, template_id, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `;
       
       this.db.run(sql, [
@@ -763,7 +765,7 @@ class DatabaseInitializer {
         profile.hls_flags || 'delete_segments+split_by_time+independent_segments',
         profile.hls_segment_filename || 'output_%d.m4s',
         profile.manifest_filename || 'output.m3u8',
-        profile.additional_params, profile.is_default, timestamp, timestamp
+        profile.additional_params, profile.is_default, profile.template_id || null, timestamp, timestamp
       ], function(err) {
         if (err) {
           log.error(`Failed to insert profile ${profile.name}: ${err.message}`);
@@ -868,6 +870,11 @@ class DatabaseInitializer {
     await this.verifyColumn('channels', 'order_index');
     await this.verifyColumn('channels', 'last_transcoding_state');
     await this.verifyColumn('channels', 'transcoding_profile_id');
+    
+    // Verify Phase 2A columns exist
+    await this.verifyColumn('transcoding_profiles', 'template_id');
+    await this.verifyColumn('channels', 'profile_recommendation');
+    await this.verifyColumn('channels', 'stream_health_status');
     
     log.success('Database schema verification completed');
   }

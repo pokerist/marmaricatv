@@ -235,6 +235,7 @@ export const bulkOperationsAPI = {
   },
   importChannels: (validChannels) => retryRequest(() => api.post('/bulk-operations/import-channels', { validChannels })),
   startBulkTranscoding: (channelIds = null, profileId = null) => retryRequest(() => api.post('/bulk-operations/start-bulk-transcoding', { channelIds, profileId })),
+  stopBulkTranscoding: () => retryRequest(() => api.post('/bulk-operations/stop-bulk-transcoding')),
   getBulkOperationStatus: (operationId) => retryRequest(() => api.get(`/bulk-operations/status/${operationId}`)),
   getRecentBulkOperations: (limit = 10) => retryRequest(() => api.get(`/bulk-operations/recent?limit=${limit}`)),
   getImportLogs: (operationId) => retryRequest(() => api.get(`/bulk-operations/import-logs/${operationId}`)),

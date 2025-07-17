@@ -33,6 +33,13 @@ router.post('/import-channels', importChannels);
 router.post('/start-bulk-transcoding', startBulkTranscoding);
 
 /**
+ * @route POST /api/bulk-operations/stop-bulk-transcoding
+ * @description Stop bulk transcoding for all active channels
+ * @access Private (requires authentication)
+ */
+router.post('/stop-bulk-transcoding', require('../controllers/bulk-operations').stopBulkTranscoding);
+
+/**
  * @route GET /api/bulk-operations/status/:operationId
  * @description Get bulk operation status
  * @access Private (requires authentication)

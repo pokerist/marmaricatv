@@ -484,6 +484,117 @@ const performBulkTranscoding = async (channelIds = null, profileId = null) => {
   }
 };
 
+/**
+ * Stops transcoding for all active channels
+ * @returns {Promise<Object>} - Transcoding stop operation results
+ */
+const performBulkTranscodingStop = async () => {
+  try {
+    // Get channels with active transcoding
+    const channels = await new Promise((resolve, reject) => {
+      db.all(
+        'SELECT * FROM channels WHERE transcoding_enabled = 1 AND transcoding_status IN (?, ?, ?)',
+        ['active', 'starting', 'running'],
+        (err, rows) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(rows);
+          }
+        }
+      );
+    });
+    
+    if (channels.length === 0) {
+      return {
+        success: true,
+        results: {
+          total: 0,
+          processed: 0,
+          failed: 0,
+          errors: []
+        }
+      };
+    }
+    
+    // Create bulk operation record
+    const bulkOperationId = await createBulkOperation('bulk_transcoding_stop', channels.length);
+    
+    // Log the start of bulk transcoding stop
+    logAction('bulk_transcoding_stop_started', `Started bulk transcoding stop for ${channels.length} channels`);
+    
+    const results = {
+      total: channels.length,
+      processed: 0,
+      failed: 0,
+      errors: []
+    };
+    
+    // Process each channel
+    for (const channel of channels) {
+      try {
+        // Stop transcoding for the channel
+        await transcodingService.stopTranscoding(channel.id, channel.name);
+        
+        // Disable transcoding for the channel
+        await new Promise((resolve, reject) => {
+          const now = new Date().toISOString();
+          db.run(
+            'UPDATE channels SET transcoding_enabled = 0, transcoding_status = ?, updated_at = ? WHERE id = ?',
+            ['inactive', now, channel.id],
+            (err) => {
+              if (err) {
+                reject(err);
+              } else {
+                resolve();
+              }
+            }
+          );
+        });
+        
+        results.processed++;
+        
+      } catch (error) {
+        console.error(`Error stopping transcoding for channel ${channel.name}:`, error);
+        results.failed++;
+        results.errors.push({
+          channel: channel.name,
+          error: error.message
+        });
+      }
+    }
+    
+    // Update bulk operation status
+    await updateBulkOperation(bulkOperationId, {
+      completed_items: results.processed,
+      failed_items: results.failed,
+      status: results.failed === 0 ? 'completed' : 'completed_with_errors',
+      error_message: results.errors.length > 0 ? 
+        `${results.errors.length} channels failed to stop transcoding` : null
+    });
+    
+    // Log completion
+    logAction('bulk_transcoding_stop_completed', 
+      `Bulk transcoding stop completed: ${results.processed} processed, ${results.failed} failed`);
+    
+    return {
+      success: true,
+      bulkOperationId,
+      results
+    };
+    
+  } catch (error) {
+    console.error('Error performing bulk transcoding stop:', error);
+    
+    logAction('bulk_transcoding_stop_failed', `Bulk transcoding stop failed: ${error.message}`);
+    
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+};
+
 module.exports = {
   createBulkOperation,
   updateBulkOperation,
@@ -491,5 +602,6 @@ module.exports = {
   getActiveBulkOperations,
   getRecentBulkOperations,
   performBulkImport,
-  performBulkTranscoding
+  performBulkTranscoding,
+  performBulkTranscodingStop
 };

@@ -209,6 +209,29 @@ const startBulkTranscoding = asyncHandler(async (req, res) => {
 });
 
 /**
+ * Stop bulk transcoding for all active channels
+ */
+const stopBulkTranscoding = asyncHandler(async (req, res) => {
+  try {
+    const { performBulkTranscodingStop } = require('../services/bulk-transcoding');
+    const transcodingResult = await performBulkTranscodingStop();
+    
+    res.json({
+      success: transcodingResult.success,
+      data: transcodingResult.results,
+      bulkOperationId: transcodingResult.bulkOperationId
+    });
+    
+  } catch (error) {
+    console.error('Error stopping bulk transcoding:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error while stopping bulk transcoding'
+    });
+  }
+});
+
+/**
  * Get bulk operation status
  */
 const getBulkOperationStatusController = asyncHandler(async (req, res) => {
@@ -542,6 +565,7 @@ module.exports = {
   parseM3U8,
   importChannels,
   startBulkTranscoding,
+  stopBulkTranscoding,
   getBulkOperationStatus: getBulkOperationStatusController,
   getRecentBulkOperations: getRecentBulkOperationsController,
   getImportLogs,
