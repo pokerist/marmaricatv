@@ -175,6 +175,9 @@ const transcodingRoutes = require('./routes/transcoding');
 const transcodingProfilesRoutes = require('./routes/transcoding-profiles');
 const bulkOperationsRoutes = require('./routes/bulk-operations');
 const enhancedTranscodingRoutes = require('./routes/enhanced-transcoding');
+const optimizedTranscodingRoutes = require('./routes/optimized-transcoding');
+const streamHealthRoutes = require('./routes/stream-health');
+const profileTemplatesRoutes = require('./routes/profile-templates');
 
 // Initialize auth table
 const { initializeAuthTable } = require('./controllers/auth');
@@ -193,6 +196,9 @@ app.use('/api/transcoding', isAuthenticated, transcodingRoutes);
 app.use('/api/transcoding-profiles', isAuthenticated, transcodingProfilesRoutes);
 app.use('/api/bulk-operations', isAuthenticated, bulkOperationsRoutes);
 app.use('/api/enhanced-transcoding', isAuthenticated, enhancedTranscodingRoutes);
+app.use('/api/optimized-transcoding', isAuthenticated, optimizedTranscodingRoutes);
+app.use('/api/stream-health', isAuthenticated, streamHealthRoutes);
+app.use('/api/profile-templates', isAuthenticated, profileTemplatesRoutes);
 app.use('/api/client', clientRoutes); // Client routes remain open
 
 // Health check route
@@ -296,6 +302,11 @@ function checkExpiredDevices() {
 
 // Initialize transcoding service
 const transcodingService = require('./services/transcoding');
+const optimizedTranscodingService = require('./services/optimized-transcoding');
+
+// Phase 2A services
+const streamHealthMonitor = require('./services/stream-health-monitor');
+const profileTemplateManager = require('./services/profile-template-manager');
 
 // Enhanced server initialization with fallbacks
 async function initializeEnhancedServices() {
@@ -377,9 +388,38 @@ async function initializeEnhancedServices() {
       }
     }
     
-    // 5. Initialize legacy transcoding service
-    console.log('Initializing legacy transcoding service...');
-    await transcodingService.initializeTranscoding();
+    // 5. Initialize optimized transcoding service
+    try {
+      console.log('Initializing optimized transcoding service...');
+      optimizedTranscodingService.setDatabase(db);
+      await optimizedTranscodingService.initializeOptimizedTranscoding();
+      console.log('Optimized transcoding service initialized');
+    } catch (error) {
+      console.warn('Optimized transcoding initialization failed, falling back to legacy:', error.message);
+      // Fallback to legacy transcoding
+      console.log('Initializing legacy transcoding service...');
+      await transcodingService.initializeTranscoding();
+    }
+    
+    // 6. Initialize stream health monitoring (Phase 2A)
+    try {
+      console.log('Initializing stream health monitoring...');
+      streamHealthMonitor.setDatabase(db);
+      await streamHealthMonitor.initializeStreamHealthMonitoring();
+      console.log('Stream health monitoring initialized');
+    } catch (error) {
+      console.warn('Stream health monitoring initialization failed:', error.message);
+    }
+    
+    // 7. Initialize profile template management (Phase 2A)
+    try {
+      console.log('Initializing profile template management...');
+      profileTemplateManager.setDatabase(db);
+      await profileTemplateManager.initializeProfileTemplates();
+      console.log('Profile template management initialized');
+    } catch (error) {
+      console.warn('Profile template management initialization failed:', error.message);
+    }
     
     console.log('All services initialized successfully!');
     
@@ -441,12 +481,34 @@ async function gracefulShutdown() {
       }
     }
     
-    // 4. Cleanup legacy transcoding processes
+    // 4. Cleanup Phase 2A services
     try {
-      console.log('Cleaning up legacy transcoding...');
-      await transcodingService.cleanup();
+      console.log('Cleaning up stream health monitoring...');
+      await streamHealthMonitor.cleanupStreamHealthMonitoring();
     } catch (error) {
-      console.warn('Legacy transcoding cleanup failed:', error.message);
+      console.warn('Stream health monitoring cleanup failed:', error.message);
+    }
+    
+    try {
+      console.log('Cleaning up profile template management...');
+      await profileTemplateManager.cleanupProfileTemplateManagement();
+    } catch (error) {
+      console.warn('Profile template management cleanup failed:', error.message);
+    }
+    
+    // 5. Cleanup optimized transcoding processes
+    try {
+      console.log('Cleaning up optimized transcoding...');
+      await optimizedTranscodingService.cleanupOptimizedTranscoding();
+    } catch (error) {
+      console.warn('Optimized transcoding cleanup failed, trying legacy:', error.message);
+      // Fallback to legacy transcoding cleanup
+      try {
+        console.log('Cleaning up legacy transcoding...');
+        await transcodingService.cleanup();
+      } catch (legacyError) {
+        console.warn('Legacy transcoding cleanup also failed:', legacyError.message);
+      }
     }
     
     // 5. Close database connection

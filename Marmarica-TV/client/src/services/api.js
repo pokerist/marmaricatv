@@ -264,4 +264,110 @@ export const newsAPI = {
   deleteNews: (id) => retryRequest(() => api.delete(`/news/${id}`)),
 };
 
+// Stream Health Monitoring API (Phase 2A)
+export const streamHealthAPI = {
+  // System overview
+  getSystemOverview: () => retryRequest(() => api.get('/stream-health/overview')),
+  
+  // Channel health status
+  getChannelStatus: (channelId) => retryRequest(() => api.get(`/stream-health/channel/${channelId}/status`)),
+  getChannelHistory: (channelId, limit = 100) => retryRequest(() => api.get(`/stream-health/channel/${channelId}/history?limit=${limit}`)),
+  forceHealthCheck: (channelId) => retryRequest(() => api.post(`/stream-health/channel/${channelId}/check`)),
+  
+  // Alerts management
+  getActiveAlerts: (channelId = null) => {
+    let queryParams = new URLSearchParams();
+    if (channelId) queryParams.append('channelId', channelId);
+    
+    return retryRequest(() => api.get(`/stream-health/alerts?${queryParams.toString()}`));
+  },
+  acknowledgeAlert: (alertId) => retryRequest(() => api.post(`/stream-health/alerts/${alertId}/acknowledge`)),
+  resolveAlert: (alertId) => retryRequest(() => api.post(`/stream-health/alerts/${alertId}/resolve`)),
+  getAlertsSummary: () => retryRequest(() => api.get('/stream-health/alerts/summary')),
+  
+  // Statistics and trends
+  getHealthStatistics: () => retryRequest(() => api.get('/stream-health/statistics')),
+  getHealthTrends: (hours = 24, channelId = null) => {
+    let queryParams = new URLSearchParams();
+    queryParams.append('hours', hours);
+    if (channelId) queryParams.append('channelId', channelId);
+    
+    return retryRequest(() => api.get(`/stream-health/trends?${queryParams.toString()}`));
+  },
+  getUptimeStatistics: (days = 7, channelId = null) => {
+    let queryParams = new URLSearchParams();
+    queryParams.append('days', days);
+    if (channelId) queryParams.append('channelId', channelId);
+    
+    return retryRequest(() => api.get(`/stream-health/uptime?${queryParams.toString()}`));
+  },
+  
+  // System maintenance
+  cleanupOldHistory: (daysToKeep = 7) => retryRequest(() => api.post('/stream-health/cleanup', { daysToKeep })),
+  getMonitoringConfig: () => retryRequest(() => api.get('/stream-health/config')),
+};
+
+// Profile Template Management API (Phase 2A)
+export const profileTemplatesAPI = {
+  // Template management
+  getAllTemplates: () => retryRequest(() => api.get('/profile-templates')),
+  getTemplateById: (templateId) => retryRequest(() => api.get(`/profile-templates/${templateId}`)),
+  getTemplatesByContentType: (contentType) => retryRequest(() => api.get(`/profile-templates/content-type/${contentType}`)),
+  createTemplate: (templateData) => retryRequest(() => api.post('/profile-templates/create', templateData)),
+  updateTemplate: (templateId, templateData) => retryRequest(() => api.put(`/profile-templates/${templateId}`, templateData)),
+  deleteTemplate: (templateId) => retryRequest(() => api.delete(`/profile-templates/${templateId}`)),
+  
+  // Profile recommendations
+  getChannelRecommendations: (channelId) => retryRequest(() => api.get(`/profile-templates/recommendations/${channelId}`)),
+  generateRecommendation: (channelId) => retryRequest(() => api.post(`/profile-templates/recommendations/${channelId}/generate`)),
+  generateAllRecommendations: () => retryRequest(() => api.post('/profile-templates/recommendations/generate-all')),
+  
+  // Template application
+  applyTemplateToChannel: (channelId, templateId, forceApply = false) => 
+    retryRequest(() => api.post(`/profile-templates/apply/${channelId}`, { templateId, forceApply })),
+  bulkApplyTemplate: (channelIds, templateId, forceApply = false) => 
+    retryRequest(() => api.post('/profile-templates/bulk-apply', { channelIds, templateId, forceApply })),
+  
+  // Analytics and insights
+  getUsageStatistics: () => retryRequest(() => api.get('/profile-templates/usage/statistics')),
+  getChannelsOverview: () => retryRequest(() => api.get('/profile-templates/channels/overview')),
+  getOptimizationSuggestions: () => retryRequest(() => api.get('/profile-templates/optimization/suggestions')),
+  getTemplatePerformance: (templateId, days = 7) => retryRequest(() => api.get(`/profile-templates/performance/${templateId}?days=${days}`)),
+  
+  // Configuration
+  getContentTypeMapping: () => retryRequest(() => api.get('/profile-templates/content-types/mapping')),
+};
+
+// Optimized Transcoding API (Phase 1)
+export const optimizedTranscodingAPI = {
+  // Core transcoding operations
+  startTranscoding: (channelId, profileId = null) => retryRequest(() => api.post(`/optimized-transcoding/start/${channelId}`, { profileId })),
+  stopTranscoding: (channelId) => retryRequest(() => api.post(`/optimized-transcoding/stop/${channelId}`)),
+  restartTranscoding: (channelId) => retryRequest(() => api.post(`/optimized-transcoding/restart/${channelId}`)),
+  
+  // Bulk operations
+  bulkStartTranscoding: (channelIds, staggerDelay = 2000) => 
+    retryRequest(() => api.post('/optimized-transcoding/bulk/start', { channelIds, staggerDelay })),
+  bulkStopTranscoding: (channelIds) => 
+    retryRequest(() => api.post('/optimized-transcoding/bulk/stop', { channelIds })),
+  
+  // System monitoring
+  getActiveJobs: () => retryRequest(() => api.get('/optimized-transcoding/jobs')),
+  getSystemHealth: () => retryRequest(() => api.get('/optimized-transcoding/health')),
+  getStorageStats: () => retryRequest(() => api.get('/optimized-transcoding/storage')),
+  getChannelStatus: (channelId) => retryRequest(() => api.get(`/optimized-transcoding/status/${channelId}`)),
+  
+  // Configuration and maintenance
+  getSystemConfig: () => retryRequest(() => api.get('/optimized-transcoding/config')),
+  setLogLevel: (logLevel) => retryRequest(() => api.post('/optimized-transcoding/logger/level', { logLevel })),
+  getLoggerConfig: () => retryRequest(() => api.get('/optimized-transcoding/logger/config')),
+  
+  // Cleanup operations
+  cleanupChannel: (channelId) => retryRequest(() => api.post(`/optimized-transcoding/cleanup/${channelId}`)),
+  cleanupSystem: () => retryRequest(() => api.post('/optimized-transcoding/cleanup/system')),
+  
+  // Health checks
+  checkStreamHealth: (channelId) => retryRequest(() => api.get(`/optimized-transcoding/health/stream/${channelId}`)),
+};
+
 export default api;

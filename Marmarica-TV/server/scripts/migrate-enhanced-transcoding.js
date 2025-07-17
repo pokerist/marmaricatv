@@ -133,12 +133,169 @@ const migrations = [
     `
   },
   
+  // Phase 2A: Stream Health Monitoring Tables
+  {
+    name: 'Create stream_health_history table',
+    query: `
+      CREATE TABLE IF NOT EXISTS stream_health_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        channel_id INTEGER NOT NULL,
+        timestamp TEXT NOT NULL,
+        availability_status TEXT NOT NULL, -- 'available', 'unavailable', 'timeout', 'error'
+        response_time INTEGER, -- in milliseconds
+        http_status_code INTEGER,
+        error_message TEXT,
+        retry_count INTEGER DEFAULT 0,
+        detection_method TEXT NOT NULL, -- 'http_head', 'ffprobe', 'ping'
+        additional_data TEXT, -- JSON string for extra info
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (channel_id) REFERENCES channels(id)
+      );
+    `
+  },
+  
+  {
+    name: 'Create stream_health_alerts table',
+    query: `
+      CREATE TABLE IF NOT EXISTS stream_health_alerts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        channel_id INTEGER NOT NULL,
+        alert_type TEXT NOT NULL, -- 'stream_down', 'stream_recovered', 'quality_degraded', 'high_latency'
+        severity TEXT NOT NULL, -- 'low', 'medium', 'high', 'critical'
+        message TEXT NOT NULL,
+        triggered_at TEXT NOT NULL,
+        acknowledged_at TEXT,
+        resolved_at TEXT,
+        auto_resolved BOOLEAN DEFAULT 0,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (channel_id) REFERENCES channels(id)
+      );
+    `
+  },
+  
+  // Phase 2A: Profile Management Enhancement
+  {
+    name: 'Add profile management columns to channels',
+    query: `
+      ALTER TABLE channels ADD COLUMN profile_recommendation TEXT;
+      ALTER TABLE channels ADD COLUMN profile_auto_switch BOOLEAN DEFAULT 0;
+      ALTER TABLE channels ADD COLUMN last_profile_change TEXT;
+      ALTER TABLE channels ADD COLUMN stream_health_status TEXT DEFAULT 'unknown';
+      ALTER TABLE channels ADD COLUMN last_health_check TEXT;
+      ALTER TABLE channels ADD COLUMN avg_response_time INTEGER DEFAULT 0;
+      ALTER TABLE channels ADD COLUMN uptime_percentage REAL DEFAULT 0;
+    `,
+    skipIfExists: true
+  },
+  
+  {
+    name: 'Create profile_templates table',
+    query: `
+      CREATE TABLE IF NOT EXISTS profile_templates (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        description TEXT,
+        content_type TEXT NOT NULL, -- 'sports', 'movies', 'news', 'general', 'kids'
+        recommended_for TEXT, -- JSON array of categories
+        video_codec TEXT NOT NULL DEFAULT 'libx264',
+        audio_codec TEXT NOT NULL DEFAULT 'aac',
+        video_bitrate TEXT DEFAULT '2000k',
+        audio_bitrate TEXT DEFAULT '128k',
+        resolution TEXT DEFAULT 'original',
+        preset TEXT DEFAULT 'ultrafast',
+        tune TEXT,
+        gop_size INTEGER DEFAULT 25,
+        keyint_min INTEGER DEFAULT 25,
+        hls_time INTEGER DEFAULT 2,
+        hls_list_size INTEGER DEFAULT 3,
+        hls_segment_type TEXT DEFAULT 'mpegts',
+        hls_flags TEXT DEFAULT 'delete_segments+append_list+omit_endlist',
+        hls_segment_filename TEXT DEFAULT 'output_%d.m4s',
+        manifest_filename TEXT DEFAULT 'output.m3u8',
+        additional_params TEXT,
+        is_ll_hls BOOLEAN DEFAULT 0,
+        priority INTEGER DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    `
+  },
+  
+  {
+    name: 'Insert default profile templates',
+    query: `
+      INSERT OR IGNORE INTO profile_templates (
+        name, description, content_type, recommended_for, video_bitrate, audio_bitrate, 
+        resolution, preset, tune, hls_time, is_ll_hls, priority, created_at, updated_at
+      ) VALUES 
+      ('HD Sports', 'High motion sports content with low latency', 'sports', '["Sports", "Entertainment"]', 
+       '4000k', '192k', '720p', 'ultrafast', 'zerolatency', 1, 1, 1, datetime('now'), datetime('now')),
+      ('HD Movies', 'High quality movies and entertainment', 'movies', '["Movies", "Entertainment"]', 
+       '3000k', '128k', '720p', 'fast', 'film', 4, 0, 2, datetime('now'), datetime('now')),
+      ('SD News', 'Optimized for talking heads and news content', 'news', '["News", "Religious"]', 
+       '1000k', '96k', '480p', 'ultrafast', 'stillimage', 6, 0, 3, datetime('now'), datetime('now')),
+      ('SD General', 'Standard definition for general content', 'general', '["General", "Family", "Kids"]', 
+       '1500k', '128k', '480p', 'fast', NULL, 4, 0, 4, datetime('now'), datetime('now')),
+      ('Ultra Low Latency', 'Minimal latency for live events', 'sports', '["Sports", "News"]', 
+       '2000k', '128k', '720p', 'ultrafast', 'zerolatency', 1, 1, 5, datetime('now'), datetime('now'))
+    `
+  },
+  
+  // Phase 2A: Enhanced Analytics
+  {
+    name: 'Create transcoding_analytics table',
+    query: `
+      CREATE TABLE IF NOT EXISTS transcoding_analytics (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        channel_id INTEGER NOT NULL,
+        profile_id INTEGER NOT NULL,
+        date TEXT NOT NULL, -- YYYY-MM-DD format
+        total_uptime INTEGER DEFAULT 0, -- in seconds
+        total_downtime INTEGER DEFAULT 0, -- in seconds
+        restart_count INTEGER DEFAULT 0,
+        error_count INTEGER DEFAULT 0,
+        avg_cpu_usage REAL DEFAULT 0,
+        avg_memory_usage REAL DEFAULT 0,
+        total_data_processed INTEGER DEFAULT 0, -- in bytes
+        quality_score REAL DEFAULT 0, -- 0-100
+        viewer_count INTEGER DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (channel_id) REFERENCES channels(id),
+        FOREIGN KEY (profile_id) REFERENCES transcoding_profiles(id)
+      );
+    `
+  },
+  
+  {
+    name: 'Create profile_performance_metrics table',
+    query: `
+      CREATE TABLE IF NOT EXISTS profile_performance_metrics (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        profile_id INTEGER NOT NULL,
+        channel_id INTEGER NOT NULL,
+        timestamp TEXT NOT NULL,
+        cpu_usage REAL NOT NULL,
+        memory_usage REAL NOT NULL,
+        encoding_speed REAL, -- frames per second
+        bitrate_efficiency REAL, -- actual vs target bitrate
+        quality_score REAL, -- 0-100
+        error_rate REAL, -- errors per minute
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (profile_id) REFERENCES transcoding_profiles(id),
+        FOREIGN KEY (channel_id) REFERENCES channels(id)
+      );
+    `
+  },
+  
   // Create indexes for performance
   {
     name: 'Create indexes for performance',
     query: `
       CREATE INDEX IF NOT EXISTS idx_channels_transcoding_status ON channels(transcoding_status);
       CREATE INDEX IF NOT EXISTS idx_channels_dead_source_event ON channels(last_dead_source_event);
+      CREATE INDEX IF NOT EXISTS idx_channels_health_status ON channels(stream_health_status);
+      CREATE INDEX IF NOT EXISTS idx_channels_profile_id ON channels(transcoding_profile_id);
       CREATE INDEX IF NOT EXISTS idx_transcoding_jobs_channel_id ON transcoding_jobs(channel_id);
       CREATE INDEX IF NOT EXISTS idx_transcoding_jobs_status ON transcoding_jobs(status);
       CREATE INDEX IF NOT EXISTS idx_transcoding_jobs_profile_id ON transcoding_jobs(profile_id);
@@ -150,6 +307,15 @@ const migrations = [
       CREATE INDEX IF NOT EXISTS idx_actions_channel_id ON actions(channel_id);
       CREATE INDEX IF NOT EXISTS idx_actions_created_at ON actions(created_at);
       CREATE INDEX IF NOT EXISTS idx_actions_type ON actions(action_type);
+      CREATE INDEX IF NOT EXISTS idx_stream_health_history_channel_id ON stream_health_history(channel_id);
+      CREATE INDEX IF NOT EXISTS idx_stream_health_history_timestamp ON stream_health_history(timestamp);
+      CREATE INDEX IF NOT EXISTS idx_stream_health_alerts_channel_id ON stream_health_alerts(channel_id);
+      CREATE INDEX IF NOT EXISTS idx_stream_health_alerts_triggered_at ON stream_health_alerts(triggered_at);
+      CREATE INDEX IF NOT EXISTS idx_profile_templates_content_type ON profile_templates(content_type);
+      CREATE INDEX IF NOT EXISTS idx_transcoding_analytics_channel_id ON transcoding_analytics(channel_id);
+      CREATE INDEX IF NOT EXISTS idx_transcoding_analytics_date ON transcoding_analytics(date);
+      CREATE INDEX IF NOT EXISTS idx_profile_performance_metrics_profile_id ON profile_performance_metrics(profile_id);
+      CREATE INDEX IF NOT EXISTS idx_profile_performance_metrics_timestamp ON profile_performance_metrics(timestamp);
     `
   }
 ];

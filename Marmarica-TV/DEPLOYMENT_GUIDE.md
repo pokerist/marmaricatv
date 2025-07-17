@@ -10,10 +10,7 @@ This guide provides step-by-step instructions for deploying the Marmarica TV IPT
 # Clone repository
 git clone https://github.com/pokerist/marmaricatv.git
 cd marmaricatv
-git fetch origin
-git branch -r
-git checkout -b marmarica origin/marmarica
-git pull origin marmarica
+git fetch origin && git branch -r && git checkout -b marmarica origin/marmarica && git pull origin marmarica
 
 cd Marmarica-TV
 

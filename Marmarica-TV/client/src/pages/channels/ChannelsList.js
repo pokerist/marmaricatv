@@ -10,6 +10,8 @@ import { toast } from 'react-toastify';
 import M3U8Upload from '../../components/M3U8Upload';
 import BulkTranscodingModal from '../../components/BulkTranscodingModal';
 import DeleteAllChannelsModal from '../../components/DeleteAllChannelsModal';
+import StreamHealthIndicator from '../../components/StreamHealthIndicator';
+import ProfileRecommendationBadge from '../../components/ProfileRecommendationBadge';
 
 const ChannelsList = () => {
   const [channels, setChannels] = useState([]);
@@ -465,8 +467,10 @@ const ChannelsList = () => {
                       <th>Type</th>
                       <th>Category</th>
                       <th>Has News</th>
+                      <th>Health Status</th>
+                      <th>Profile Recommendation</th>
                       <th>Transcoding</th>
-                      <th style={{width: '250px'}}>Actions</th>
+                      <th style={{width: '200px'}}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -505,6 +509,24 @@ const ChannelsList = () => {
                           ) : (
                             <Badge bg="secondary">No</Badge>
                           )}
+                        </td>
+                        <td>
+                          <StreamHealthIndicator 
+                            channelId={channel.id}
+                            initialStatus={channel.stream_health_status}
+                            showDetails={false}
+                          />
+                        </td>
+                        <td>
+                          <ProfileRecommendationBadge 
+                            channelId={channel.id}
+                            currentProfile={channel.current_template_name}
+                            showApplyButton={true}
+                            onProfileApplied={(templateId, templateName) => {
+                              // Refresh channel data after profile is applied
+                              setTimeout(fetchChannels, 500);
+                            }}
+                          />
                         </td>
                         <td>
                           <div className="d-flex flex-column gap-1">
