@@ -320,6 +320,288 @@ initialize_database() {
     cd "$SCRIPT_DIR"
 }
 
+# Run Phase 1 database migrations
+run_phase1_migrations() {
+    log "Running Phase 1 database migrations..."
+    
+    cd "$SCRIPT_DIR/server"
+    
+    # Run Phase 1 state tracking migration
+    if [[ -f "scripts/add-transcoding-state-tracking.js" ]]; then
+        node scripts/add-transcoding-state-tracking.js
+        log "✓ Phase 1 state tracking migration completed"
+    else
+        warning "Phase 1 state tracking migration script not found - may already be applied"
+    fi
+    
+    cd "$SCRIPT_DIR"
+}
+
+# Run Phase 2A database migrations
+run_phase2a_migrations() {
+    log "Running Phase 2A database migrations..."
+    
+    cd "$SCRIPT_DIR/server"
+    
+    # Run Phase 2A migrations
+    if [[ -f "scripts/migrate-enhanced-transcoding.js" ]]; then
+        node scripts/migrate-enhanced-transcoding.js
+        log "✓ Phase 2A migrations completed"
+    else
+        error "Phase 2A migration script not found"
+        exit 1
+    fi
+    
+    cd "$SCRIPT_DIR"
+}
+
+# Validate Phase 2A database schema
+validate_phase2a_database() {
+    log "Validating Phase 2A database schema..."
+    
+    cd "$SCRIPT_DIR/server"
+    
+    # Required Phase 2A tables
+    local required_tables=("stream_health_history" "stream_health_alerts" "profile_templates" "transcoding_analytics" "profile_performance_metrics")
+    
+    for table in "${required_tables[@]}"; do
+        local exists=$(sqlite3 database.sqlite "SELECT name FROM sqlite_master WHERE type='table' AND name='$table';" 2>/dev/null)
+        if [[ -n "$exists" ]]; then
+            log "✓ Table $table exists"
+        else
+            error "Required table $table not found"
+            return 1
+        fi
+    done
+    
+    # Check for default profile templates
+    local template_count=$(sqlite3 database.sqlite "SELECT COUNT(*) FROM profile_templates;" 2>/dev/null || echo "0")
+    if [[ $template_count -gt 0 ]]; then
+        log "✓ Profile templates loaded ($template_count templates)"
+    else
+        error "No profile templates found in database"
+        return 1
+    fi
+    
+    cd "$SCRIPT_DIR"
+}
+
+# Verify frontend components
+verify_frontend_components() {
+    log "Verifying Phase 2B frontend components..."
+    
+    # Required Phase 2B components
+    local required_components=("StreamHealthIndicator.js" "ProfileRecommendationBadge.js")
+    
+    for component in "${required_components[@]}"; do
+        if [[ -f "$SCRIPT_DIR/client/src/components/$component" ]]; then
+            log "✓ Component $component found"
+        else
+            error "Required component $component not found"
+            return 1
+        fi
+    done
+    
+    # Check if components are properly built
+    if [[ -f "$SCRIPT_DIR/client/build/static/js/main."*.js ]]; then
+        local main_js=$(ls "$SCRIPT_DIR/client/build/static/js/main."*.js 2>/dev/null | head -1)
+        if grep -q "StreamHealthIndicator\|ProfileRecommendationBadge" "$main_js" 2>/dev/null; then
+            log "✓ Phase 2B components included in build"
+        else
+            warning "Phase 2B components may not be properly included in build"
+        fi
+    fi
+}
+
+# Test Phase 2A API endpoints
+test_phase2a_endpoints() {
+    log "Testing Phase 2A API endpoints..."
+    
+    # Wait for services to start
+    sleep 3
+    
+    # Test stream health API
+    local health_response=$(curl -s "http://localhost:5000/api/stream-health/overview" || echo "failed")
+    if [[ "$health_response" == *"success"* ]] || [[ "$health_response" == *"data"* ]]; then
+        log "✓ Stream health API working"
+    else
+        error "Stream health API failed: $health_response"
+        return 1
+    fi
+    
+    # Test profile templates API
+    local templates_response=$(curl -s "http://localhost:5000/api/profile-templates" || echo "failed")
+    if [[ "$templates_response" == *"success"* ]] || [[ "$templates_response" == *"data"* ]]; then
+        log "✓ Profile templates API working"
+    else
+        error "Profile templates API failed: $templates_response"
+        return 1
+    fi
+    
+    # Test profile templates content
+    local template_names=$(echo "$templates_response" | jq -r '.data[].name' 2>/dev/null || echo "")
+    if [[ "$template_names" == *"HD Sports"* ]]; then
+        log "✓ Default profile templates loaded"
+    else
+        warning "Default profile templates may not be loaded properly"
+    fi
+    
+    # Test enhanced transcoding endpoints
+    local transcoding_response=$(curl -s "http://localhost:5000/api/optimized-transcoding/health" || echo "failed")
+    if [[ "$transcoding_response" == *"success"* ]] || [[ "$transcoding_response" == *"data"* ]]; then
+        log "✓ Enhanced transcoding API working"
+    else
+        error "Enhanced transcoding API failed: $transcoding_response"
+        return 1
+    fi
+}
+
+# Initialize Phase 2A services
+initialize_phase2a_services() {
+    log "Initializing Phase 2A services..."
+    
+    cd "$SCRIPT_DIR/server"
+    
+    # Test service initialization
+    local init_test=$(node -e "
+        const streamHealthMonitor = require('./services/stream-health-monitor');
+        const profileTemplateManager = require('./services/profile-template-manager');
+        console.log('Services loaded successfully');
+    " 2>/dev/null || echo "failed")
+    
+    if [[ "$init_test" == *"successfully"* ]]; then
+        log "✓ Phase 2A services initialized"
+    else
+        error "Phase 2A service initialization failed"
+        return 1
+    fi
+    
+    cd "$SCRIPT_DIR"
+}
+
+# Validate Phase 1 database schema
+validate_phase1_database() {
+    log "Validating Phase 1 database schema..."
+    
+    cd "$SCRIPT_DIR/server"
+    
+    # Check for last_transcoding_state column
+    local column_exists=$(sqlite3 database.sqlite "PRAGMA table_info(channels);" | grep "last_transcoding_state" || echo "")
+    if [[ -n "$column_exists" ]]; then
+        log "✓ last_transcoding_state column exists"
+    else
+        error "Required Phase 1 column last_transcoding_state not found"
+        return 1
+    fi
+    
+    # Check for existing channels with state tracking
+    local channels_with_state=$(sqlite3 database.sqlite "SELECT COUNT(*) FROM channels WHERE last_transcoding_state IS NOT NULL;" 2>/dev/null || echo "0")
+    if [[ $channels_with_state -gt 0 ]]; then
+        log "✓ Channels have state tracking data ($channels_with_state channels)"
+    else
+        log "✓ State tracking column ready for use"
+    fi
+    
+    cd "$SCRIPT_DIR"
+}
+
+# Test optimized transcoding service
+test_optimized_transcoding_service() {
+    log "Testing optimized transcoding service..."
+    
+    # Wait for services to start
+    sleep 2
+    
+    # Test optimized transcoding health endpoint
+    local health_response=$(curl -s "http://localhost:5000/api/optimized-transcoding/health" || echo "failed")
+    if [[ "$health_response" == *"success"* ]] || [[ "$health_response" == *"data"* ]]; then
+        log "✓ Optimized transcoding service working"
+    else
+        warning "Optimized transcoding service check failed - may fallback to legacy service"
+    fi
+    
+    # Test intelligent logger configuration
+    local logger_response=$(curl -s "http://localhost:5000/api/optimized-transcoding/config" || echo "failed")
+    if [[ "$logger_response" == *"success"* ]] || [[ "$logger_response" == *"intelligentLogger"* ]]; then
+        log "✓ Intelligent logger configured"
+    else
+        warning "Intelligent logger configuration check failed"
+    fi
+    
+    # Test storage monitoring
+    local storage_response=$(curl -s "http://localhost:5000/api/optimized-transcoding/storage" || echo "failed")
+    if [[ "$storage_response" == *"success"* ]] || [[ "$storage_response" == *"totalSize"* ]]; then
+        log "✓ Storage monitoring active"
+    else
+        warning "Storage monitoring check failed"
+    fi
+}
+
+# Verify log optimization system
+verify_log_optimization() {
+    log "Verifying log flooding resolution..."
+    
+    # Check if optimized transcoding service is being used
+    local service_check=$(curl -s "http://localhost:5000/api/optimized-transcoding/config" || echo "failed")
+    if [[ "$service_check" == *"intelligentLogger"* ]]; then
+        log "✓ Log optimization system active"
+    else
+        warning "Log optimization system may not be active - using legacy logging"
+    fi
+    
+    # Test log level configuration
+    local log_level_response=$(curl -s -X POST "http://localhost:5000/api/optimized-transcoding/logger/level" \
+        -H "Content-Type: application/json" \
+        -d '{"logLevel": 2}' || echo "failed")
+    if [[ "$log_level_response" == *"success"* ]]; then
+        log "✓ Log level configuration working"
+    else
+        warning "Log level configuration test failed"
+    fi
+}
+
+# Verify safe cleanup system
+verify_safe_cleanup_system() {
+    log "Verifying safe cleanup system..."
+    
+    # Check cleanup configuration via storage endpoint
+    local cleanup_config=$(curl -s "http://localhost:5000/api/optimized-transcoding/storage" || echo "failed")
+    if [[ "$cleanup_config" == *"success"* ]]; then
+        log "✓ Safe cleanup system configured"
+    else
+        warning "Safe cleanup system verification failed"
+    fi
+    
+    # Test manual cleanup trigger
+    local cleanup_response=$(curl -s -X POST "http://localhost:5000/api/optimized-transcoding/cleanup/system" || echo "failed")
+    if [[ "$cleanup_response" == *"success"* ]] || [[ "$cleanup_response" == *"completed"* ]]; then
+        log "✓ Manual cleanup system working"
+    else
+        warning "Manual cleanup system test failed"
+    fi
+}
+
+# Test Phase 1 URL preservation
+test_phase1_url_preservation() {
+    log "Testing Phase 1 URL preservation..."
+    
+    # Test channels API to ensure URL preservation
+    local channels_response=$(curl -s "http://localhost:5000/api/channels" || echo "failed")
+    if [[ "$channels_response" == *"success"* ]] || [[ "$channels_response" == *"data"* ]]; then
+        log "✓ Channels API working (URL preservation ready)"
+    else
+        warning "Channels API test failed"
+    fi
+    
+    # Test individual channel retrieval
+    local channel_response=$(curl -s "http://localhost:5000/api/channels/1" || echo "failed")
+    if [[ "$channel_response" == *"success"* ]] || [[ "$channel_response" == *"data"* ]] || [[ "$channel_response" == *"Channel not found"* ]]; then
+        log "✓ Individual channel retrieval working"
+    else
+        warning "Individual channel retrieval test failed"
+    fi
+}
+
 # Create admin user
 create_admin_user() {
     log "Creating admin user..."
@@ -725,13 +1007,24 @@ main() {
     create_environment_files
     install_project_dependencies
     initialize_database
+    run_phase1_migrations
+    run_phase2a_migrations
     create_admin_user
     build_frontend
+    verify_frontend_components
+    initialize_phase2a_services
     configure_nginx_hls
     setup_hls_permissions
     configure_firewall
     start_services
     run_verification
+    validate_phase1_database
+    test_optimized_transcoding_service
+    verify_log_optimization
+    verify_safe_cleanup_system
+    test_phase1_url_preservation
+    validate_phase2a_database
+    test_phase2a_endpoints
     
     # Success
     print_summary
