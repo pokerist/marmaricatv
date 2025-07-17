@@ -6,6 +6,7 @@ This guide provides step-by-step instructions for deploying the Marmarica TV IPT
 
 **New! One-command deployment:**
 
+
 ```bash
 # Clone repository
 git clone https://github.com/pokerist/marmaricatv.git
