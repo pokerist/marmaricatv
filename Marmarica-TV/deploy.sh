@@ -105,6 +105,11 @@ install_dependencies() {
     # Update package list
     sudo apt update -y
     
+    # Install build tools first (required for native Node.js packages)
+    log "Installing build essential tools..."
+    sudo apt install -y build-essential python3-dev libnode-dev
+    log "✓ Build tools installed"
+    
     # Install Node.js 18+
     if ! command -v node &> /dev/null; then
         log "Installing Node.js..."
