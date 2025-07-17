@@ -408,11 +408,12 @@ const generateOptimizedFFmpegCommand = async (inputUrl, channelId, profileId = n
       // HLS output settings
       '-f', 'hls',
       '-hls_time', profile.hls_time.toString(),
+      '-hls_playlist_type', 'live',
       '-hls_list_size', Math.max(profile.hls_list_size, 3).toString(),
       '-hls_segment_type', profile.hls_segment_type || 'mpegts',
       
       // Enhanced HLS flags for better cleanup
-      '-hls_flags', 'delete_segments+append_list+omit_endlist+independent_segments',
+      '-hls_flags', 'delete_segments+append_list+independent_segments',
       '-hls_delete_threshold', '1',
       '-hls_segment_filename', segmentPath,
       

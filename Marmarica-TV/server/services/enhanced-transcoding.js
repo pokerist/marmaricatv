@@ -542,7 +542,7 @@ const generateFFmpegCommand = async (inputUrl, channelId, profileId = null, isRe
       '-b:a', profile.audio_bitrate,
       '-f', 'hls',
       '-hls_time', profile.hls_time.toString(),
-      '-hls_playlist_type', 'event',
+      '-hls_playlist_type', 'live',
       '-hls_segment_type', profile.hls_segment_type || 'fmp4',
       '-hls_flags', profile.hls_flags || 'delete_segments+split_by_time+independent_segments',
       '-hls_segment_filename', segmentPath,

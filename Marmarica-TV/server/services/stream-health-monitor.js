@@ -260,7 +260,7 @@ class StreamHealthMonitor extends EventEmitter {
     });
   }
 
-  // Update channel health status in database
+  // Update channel health status in database with uptime calculation
   async updateChannelHealthStatus(channelId, healthResult) {
     if (!this.db) return;
     
@@ -268,26 +268,50 @@ class StreamHealthMonitor extends EventEmitter {
     const responseTime = healthResult.responseTime || 0;
     
     return new Promise((resolve, reject) => {
-      this.db.run(`
-        UPDATE channels 
-        SET stream_health_status = ?, 
-            last_health_check = ?, 
-            avg_response_time = ?,
-            updated_at = ?
-        WHERE id = ?
-      `, [
-        healthResult.availabilityStatus,
-        healthResult.timestamp,
-        responseTime,
-        now,
-        channelId
-      ], (err) => {
+      // First calculate uptime percentage from last 24 hours
+      this.db.get(`
+        SELECT 
+          COUNT(*) as total_checks,
+          COUNT(CASE WHEN availability_status = 'available' THEN 1 END) as available_checks
+        FROM stream_health_history 
+        WHERE channel_id = ? AND timestamp >= datetime('now', '-24 hours')
+      `, [channelId], (err, uptimeData) => {
         if (err) {
-          console.error('Error updating channel health status:', err);
+          console.error('Error calculating uptime:', err);
           reject(err);
-        } else {
-          resolve();
+          return;
         }
+        
+        // Calculate uptime percentage
+        let uptimePercentage = 0;
+        if (uptimeData && uptimeData.total_checks > 0) {
+          uptimePercentage = (uptimeData.available_checks / uptimeData.total_checks) * 100;
+        }
+        
+        // Update channel with health status and uptime
+        this.db.run(`
+          UPDATE channels 
+          SET stream_health_status = ?, 
+              last_health_check = ?, 
+              avg_response_time = ?,
+              uptime_percentage = ?,
+              updated_at = ?
+          WHERE id = ?
+        `, [
+          healthResult.availabilityStatus,
+          healthResult.timestamp,
+          responseTime,
+          Math.round(uptimePercentage * 100) / 100, // Round to 2 decimal places
+          now,
+          channelId
+        ], (err) => {
+          if (err) {
+            console.error('Error updating channel health status:', err);
+            reject(err);
+          } else {
+            resolve();
+          }
+        });
       });
     });
   }

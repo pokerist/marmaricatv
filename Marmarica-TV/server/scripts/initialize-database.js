@@ -646,11 +646,14 @@ class DatabaseInitializer {
     await this.createIndex('idx_channels_dead_source_event', 'channels', 'last_dead_source_event');
     await this.createIndex('idx_channels_health_status', 'channels', 'stream_health_status');
     await this.createIndex('idx_channels_profile_id', 'channels', 'transcoding_profile_id');
+    await this.createIndex('idx_channels_transcoding_enabled', 'channels', 'transcoding_enabled');
+    await this.createIndex('idx_channels_last_health_check', 'channels', 'last_health_check');
     
     // Transcoding jobs indexes
     await this.createIndex('idx_transcoding_jobs_channel_id', 'transcoding_jobs', 'channel_id');
     await this.createIndex('idx_transcoding_jobs_status', 'transcoding_jobs', 'status');
     await this.createIndex('idx_transcoding_jobs_profile_id', 'transcoding_jobs', 'profile_id');
+    await this.createIndex('idx_transcoding_jobs_updated_at', 'transcoding_jobs', 'updated_at');
     
     // Phase 2A feature indexes
     await this.createIndex('idx_dead_source_events_channel_id', 'dead_source_events', 'channel_id');
@@ -661,15 +664,34 @@ class DatabaseInitializer {
     await this.createIndex('idx_actions_channel_id', 'actions', 'channel_id');
     await this.createIndex('idx_actions_created_at', 'actions', 'created_at');
     await this.createIndex('idx_actions_type', 'actions', 'action_type');
+    
+    // Critical stream health monitoring indexes
     await this.createIndex('idx_stream_health_history_channel_id', 'stream_health_history', 'channel_id');
     await this.createIndex('idx_stream_health_history_timestamp', 'stream_health_history', 'timestamp');
+    await this.createIndex('idx_stream_health_history_channel_timestamp', 'stream_health_history', 'channel_id, timestamp');
+    await this.createIndex('idx_stream_health_history_availability', 'stream_health_history', 'availability_status');
+    
     await this.createIndex('idx_stream_health_alerts_channel_id', 'stream_health_alerts', 'channel_id');
     await this.createIndex('idx_stream_health_alerts_triggered_at', 'stream_health_alerts', 'triggered_at');
+    await this.createIndex('idx_stream_health_alerts_resolved_at', 'stream_health_alerts', 'resolved_at');
+    await this.createIndex('idx_stream_health_alerts_unresolved', 'stream_health_alerts', 'channel_id, resolved_at');
+    
+    // Profile templates indexes
     await this.createIndex('idx_profile_templates_content_type', 'profile_templates', 'content_type');
+    await this.createIndex('idx_profile_templates_priority', 'profile_templates', 'priority');
+    
+    // Analytics indexes
     await this.createIndex('idx_transcoding_analytics_channel_id', 'transcoding_analytics', 'channel_id');
     await this.createIndex('idx_transcoding_analytics_date', 'transcoding_analytics', 'date');
+    await this.createIndex('idx_transcoding_analytics_channel_date', 'transcoding_analytics', 'channel_id, date');
+    
     await this.createIndex('idx_profile_performance_metrics_profile_id', 'profile_performance_metrics', 'profile_id');
     await this.createIndex('idx_profile_performance_metrics_timestamp', 'profile_performance_metrics', 'timestamp');
+    await this.createIndex('idx_profile_performance_metrics_channel_timestamp', 'profile_performance_metrics', 'channel_id, timestamp');
+    
+    // Transcoding profiles indexes
+    await this.createIndex('idx_transcoding_profiles_is_default', 'transcoding_profiles', 'is_default');
+    await this.createIndex('idx_transcoding_profiles_template_id', 'transcoding_profiles', 'template_id');
   }
 
   async insertDefaultProfiles() {
@@ -691,7 +713,7 @@ class DatabaseInitializer {
         hls_time: 6,
         hls_list_size: 4,
         hls_segment_type: 'fmp4',
-        hls_flags: 'delete_segments+split_by_time+independent_segments',
+        hls_flags: 'delete_segments+independent_segments',
         hls_segment_filename: 'output_%d.m4s',
         manifest_filename: 'output.m3u8',
         additional_params: '-hls_delete_threshold 1',
