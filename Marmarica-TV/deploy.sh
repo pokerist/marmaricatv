@@ -314,53 +314,18 @@ setup_directories() {
     log "✓ Backup directory created"
 }
 
-# Initialize database
+# Initialize complete database with all features
 initialize_database() {
-    log "Initializing database..."
+    log "Initializing complete database with all features..."
     
     cd "$SCRIPT_DIR/server"
     
-    # Run database initialization script
+    # Run unified database initialization script that includes all features
     if [[ -f "scripts/initialize-database.js" ]]; then
         node scripts/initialize-database.js
-        log "✓ Database initialized"
+        log "✓ Complete database initialized with all Phase 1, 2A, and 2B features"
     else
         error "Database initialization script not found"
-        exit 1
-    fi
-    
-    cd "$SCRIPT_DIR"
-}
-
-# Run Phase 1 database migrations
-run_phase1_migrations() {
-    log "Running Phase 1 database migrations..."
-    
-    cd "$SCRIPT_DIR/server"
-    
-    # Run Phase 1 state tracking migration
-    if [[ -f "scripts/add-transcoding-state-tracking.js" ]]; then
-        node scripts/add-transcoding-state-tracking.js
-        log "✓ Phase 1 state tracking migration completed"
-    else
-        warning "Phase 1 state tracking migration script not found - may already be applied"
-    fi
-    
-    cd "$SCRIPT_DIR"
-}
-
-# Run Phase 2A database migrations
-run_phase2a_migrations() {
-    log "Running Phase 2A database migrations..."
-    
-    cd "$SCRIPT_DIR/server"
-    
-    # Run Phase 2A migrations
-    if [[ -f "scripts/migrate-enhanced-transcoding.js" ]]; then
-        node scripts/migrate-enhanced-transcoding.js
-        log "✓ Phase 2A migrations completed"
-    else
-        error "Phase 2A migration script not found"
         exit 1
     fi
     
@@ -1048,8 +1013,6 @@ main() {
     create_environment_files
     install_project_dependencies
     initialize_database
-    run_phase1_migrations
-    run_phase2a_migrations
     create_admin_user
     build_frontend
     verify_frontend_components

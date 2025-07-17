@@ -58,6 +58,9 @@ class DatabaseInitializer {
       // Add transcoding profiles support
       await this.addTranscodingProfiles();
       
+      // Add Phase 2A enhanced features
+      await this.addPhase2AFeatures();
+      
       // Create directories
       await this.createDirectories();
       
@@ -306,6 +309,367 @@ class DatabaseInitializer {
     await this.updateChannelsWithDefaultProfile();
   }
 
+  async addPhase2AFeatures() {
+    log.section('🚀 Phase 2A Enhanced Features');
+    
+    // Add enhanced columns to channels table
+    await this.addColumn('channels', 'offline_reason', 'TEXT');
+    await this.addColumn('channels', 'dead_source_count', 'INTEGER DEFAULT 0');
+    await this.addColumn('channels', 'last_dead_source_event', 'TEXT');
+    await this.addColumn('channels', 'profile_recommendation', 'TEXT');
+    await this.addColumn('channels', 'profile_auto_switch', 'BOOLEAN DEFAULT 0');
+    await this.addColumn('channels', 'last_profile_change', 'TEXT');
+    await this.addColumn('channels', 'stream_health_status', 'TEXT DEFAULT \'unknown\'');
+    await this.addColumn('channels', 'last_health_check', 'TEXT');
+    await this.addColumn('channels', 'avg_response_time', 'INTEGER DEFAULT 0');
+    await this.addColumn('channels', 'uptime_percentage', 'REAL DEFAULT 0');
+
+    // Add enhanced columns to actions table
+    await this.addColumn('actions', 'channel_id', 'INTEGER');
+    await this.addColumn('actions', 'additional_data', 'TEXT');
+
+    // Add profile_id to transcoding_jobs table
+    await this.addColumn('transcoding_jobs', 'profile_id', 'INTEGER');
+
+    // Create dead_source_events table
+    await this.createTable('dead_source_events', `
+      CREATE TABLE IF NOT EXISTS dead_source_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        channel_id INTEGER NOT NULL,
+        error_count INTEGER NOT NULL,
+        error_patterns TEXT NOT NULL,
+        profile_level INTEGER NOT NULL,
+        cooldown_until TEXT NOT NULL,
+        retry_count INTEGER DEFAULT 0,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (channel_id) REFERENCES channels(id)
+      )
+    `);
+
+    // Create profile_migrations table
+    await this.createTable('profile_migrations', `
+      CREATE TABLE IF NOT EXISTS profile_migrations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        from_profile_id INTEGER,
+        to_profile_id INTEGER NOT NULL,
+        affected_channels INTEGER NOT NULL,
+        successful_channels INTEGER DEFAULT 0,
+        failed_channels INTEGER DEFAULT 0,
+        status TEXT NOT NULL,
+        started_at TEXT NOT NULL,
+        completed_at TEXT,
+        error_message TEXT,
+        FOREIGN KEY (from_profile_id) REFERENCES transcoding_profiles(id),
+        FOREIGN KEY (to_profile_id) REFERENCES transcoding_profiles(id)
+      )
+    `);
+
+    // Create channel_restart_queue table
+    await this.createTable('channel_restart_queue', `
+      CREATE TABLE IF NOT EXISTS channel_restart_queue (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        channel_id INTEGER NOT NULL,
+        profile_id INTEGER NOT NULL,
+        priority INTEGER DEFAULT 0,
+        scheduled_for TEXT NOT NULL,
+        status TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (channel_id) REFERENCES channels(id),
+        FOREIGN KEY (profile_id) REFERENCES transcoding_profiles(id)
+      )
+    `);
+
+    // Create resource_history table
+    await this.createTable('resource_history', `
+      CREATE TABLE IF NOT EXISTS resource_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        timestamp TEXT NOT NULL,
+        cpu_usage REAL NOT NULL,
+        memory_usage REAL NOT NULL,
+        disk_usage REAL NOT NULL,
+        memory_total INTEGER NOT NULL,
+        memory_used INTEGER NOT NULL,
+        disk_total INTEGER NOT NULL,
+        disk_used INTEGER NOT NULL,
+        cpu_health TEXT NOT NULL,
+        memory_health TEXT NOT NULL,
+        disk_health TEXT NOT NULL,
+        overall_health TEXT NOT NULL
+      )
+    `);
+
+    // Create resource_alerts table
+    await this.createTable('resource_alerts', `
+      CREATE TABLE IF NOT EXISTS resource_alerts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        alert_type TEXT NOT NULL,
+        message TEXT NOT NULL,
+        value REAL NOT NULL,
+        threshold REAL NOT NULL,
+        created_at TEXT NOT NULL
+      )
+    `);
+
+    // Create stream_health_history table
+    await this.createTable('stream_health_history', `
+      CREATE TABLE IF NOT EXISTS stream_health_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        channel_id INTEGER NOT NULL,
+        timestamp TEXT NOT NULL,
+        availability_status TEXT NOT NULL,
+        response_time INTEGER,
+        http_status_code INTEGER,
+        error_message TEXT,
+        retry_count INTEGER DEFAULT 0,
+        detection_method TEXT NOT NULL,
+        additional_data TEXT,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (channel_id) REFERENCES channels(id)
+      )
+    `);
+
+    // Create stream_health_alerts table
+    await this.createTable('stream_health_alerts', `
+      CREATE TABLE IF NOT EXISTS stream_health_alerts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        channel_id INTEGER NOT NULL,
+        alert_type TEXT NOT NULL,
+        severity TEXT NOT NULL,
+        message TEXT NOT NULL,
+        triggered_at TEXT NOT NULL,
+        acknowledged_at TEXT,
+        resolved_at TEXT,
+        auto_resolved BOOLEAN DEFAULT 0,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (channel_id) REFERENCES channels(id)
+      )
+    `);
+
+    // Create profile_templates table
+    await this.createTable('profile_templates', `
+      CREATE TABLE IF NOT EXISTS profile_templates (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        description TEXT,
+        content_type TEXT NOT NULL,
+        recommended_for TEXT,
+        video_codec TEXT NOT NULL DEFAULT 'libx264',
+        audio_codec TEXT NOT NULL DEFAULT 'aac',
+        video_bitrate TEXT DEFAULT '2000k',
+        audio_bitrate TEXT DEFAULT '128k',
+        resolution TEXT DEFAULT 'original',
+        preset TEXT DEFAULT 'ultrafast',
+        tune TEXT,
+        gop_size INTEGER DEFAULT 25,
+        keyint_min INTEGER DEFAULT 25,
+        hls_time INTEGER DEFAULT 2,
+        hls_list_size INTEGER DEFAULT 3,
+        hls_segment_type TEXT DEFAULT 'mpegts',
+        hls_flags TEXT DEFAULT 'delete_segments+append_list+omit_endlist',
+        hls_segment_filename TEXT DEFAULT 'output_%d.m4s',
+        manifest_filename TEXT DEFAULT 'output.m3u8',
+        additional_params TEXT,
+        is_ll_hls BOOLEAN DEFAULT 0,
+        priority INTEGER DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    `);
+
+    // Create transcoding_analytics table
+    await this.createTable('transcoding_analytics', `
+      CREATE TABLE IF NOT EXISTS transcoding_analytics (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        channel_id INTEGER NOT NULL,
+        profile_id INTEGER NOT NULL,
+        date TEXT NOT NULL,
+        total_uptime INTEGER DEFAULT 0,
+        total_downtime INTEGER DEFAULT 0,
+        restart_count INTEGER DEFAULT 0,
+        error_count INTEGER DEFAULT 0,
+        avg_cpu_usage REAL DEFAULT 0,
+        avg_memory_usage REAL DEFAULT 0,
+        total_data_processed INTEGER DEFAULT 0,
+        quality_score REAL DEFAULT 0,
+        viewer_count INTEGER DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (channel_id) REFERENCES channels(id),
+        FOREIGN KEY (profile_id) REFERENCES transcoding_profiles(id)
+      )
+    `);
+
+    // Create profile_performance_metrics table
+    await this.createTable('profile_performance_metrics', `
+      CREATE TABLE IF NOT EXISTS profile_performance_metrics (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        profile_id INTEGER NOT NULL,
+        channel_id INTEGER NOT NULL,
+        timestamp TEXT NOT NULL,
+        cpu_usage REAL NOT NULL,
+        memory_usage REAL NOT NULL,
+        encoding_speed REAL,
+        bitrate_efficiency REAL,
+        quality_score REAL,
+        error_rate REAL,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (profile_id) REFERENCES transcoding_profiles(id),
+        FOREIGN KEY (channel_id) REFERENCES channels(id)
+      )
+    `);
+
+    // Insert default profile templates
+    await this.insertDefaultProfileTemplates();
+
+    // Create performance indexes
+    await this.createPhase2AIndexes();
+  }
+
+  async insertDefaultProfileTemplates() {
+    const now = new Date().toISOString();
+    
+    const defaultTemplates = [
+      {
+        name: 'HD Sports',
+        description: 'High motion sports content with low latency',
+        content_type: 'sports',
+        recommended_for: '["Sports", "Entertainment"]',
+        video_bitrate: '4000k',
+        audio_bitrate: '192k',
+        resolution: '720p',
+        preset: 'ultrafast',
+        tune: 'zerolatency',
+        hls_time: 1,
+        is_ll_hls: 1,
+        priority: 1
+      },
+      {
+        name: 'HD Movies',
+        description: 'High quality movies and entertainment',
+        content_type: 'movies',
+        recommended_for: '["Movies", "Entertainment"]',
+        video_bitrate: '3000k',
+        audio_bitrate: '128k',
+        resolution: '720p',
+        preset: 'fast',
+        tune: 'film',
+        hls_time: 4,
+        is_ll_hls: 0,
+        priority: 2
+      },
+      {
+        name: 'SD News',
+        description: 'Optimized for talking heads and news content',
+        content_type: 'news',
+        recommended_for: '["News", "Religious"]',
+        video_bitrate: '1000k',
+        audio_bitrate: '96k',
+        resolution: '480p',
+        preset: 'ultrafast',
+        tune: 'stillimage',
+        hls_time: 6,
+        is_ll_hls: 0,
+        priority: 3
+      },
+      {
+        name: 'SD General',
+        description: 'Standard definition for general content',
+        content_type: 'general',
+        recommended_for: '["General", "Family", "Kids"]',
+        video_bitrate: '1500k',
+        audio_bitrate: '128k',
+        resolution: '480p',
+        preset: 'fast',
+        tune: null,
+        hls_time: 4,
+        is_ll_hls: 0,
+        priority: 4
+      },
+      {
+        name: 'Ultra Low Latency',
+        description: 'Minimal latency for live events',
+        content_type: 'sports',
+        recommended_for: '["Sports", "News"]',
+        video_bitrate: '2000k',
+        audio_bitrate: '128k',
+        resolution: '720p',
+        preset: 'ultrafast',
+        tune: 'zerolatency',
+        hls_time: 1,
+        is_ll_hls: 1,
+        priority: 5
+      }
+    ];
+
+    for (const template of defaultTemplates) {
+      await this.insertProfileTemplate(template, now);
+    }
+  }
+
+  async insertProfileTemplate(template, timestamp) {
+    return new Promise((resolve, reject) => {
+      const sql = `
+        INSERT OR IGNORE INTO profile_templates (
+          name, description, content_type, recommended_for, video_bitrate, audio_bitrate,
+          resolution, preset, tune, hls_time, is_ll_hls, priority, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `;
+      
+      this.db.run(sql, [
+        template.name, template.description, template.content_type, template.recommended_for,
+        template.video_bitrate, template.audio_bitrate, template.resolution, template.preset,
+        template.tune, template.hls_time, template.is_ll_hls, template.priority,
+        timestamp, timestamp
+      ], function(err) {
+        if (err) {
+          log.error(`Failed to insert profile template ${template.name}: ${err.message}`);
+          reject(err);
+        } else {
+          if (this.changes > 0) {
+            log.success(`Inserted profile template: ${template.name}`);
+          } else {
+            log.warning(`Profile template ${template.name} already exists`);
+          }
+          resolve();
+        }
+      });
+    });
+  }
+
+  async createPhase2AIndexes() {
+    log.section('📊 Creating Performance Indexes');
+    
+    // Channel indexes
+    await this.createIndex('idx_channels_transcoding_status', 'channels', 'transcoding_status');
+    await this.createIndex('idx_channels_dead_source_event', 'channels', 'last_dead_source_event');
+    await this.createIndex('idx_channels_health_status', 'channels', 'stream_health_status');
+    await this.createIndex('idx_channels_profile_id', 'channels', 'transcoding_profile_id');
+    
+    // Transcoding jobs indexes
+    await this.createIndex('idx_transcoding_jobs_channel_id', 'transcoding_jobs', 'channel_id');
+    await this.createIndex('idx_transcoding_jobs_status', 'transcoding_jobs', 'status');
+    await this.createIndex('idx_transcoding_jobs_profile_id', 'transcoding_jobs', 'profile_id');
+    
+    // Phase 2A feature indexes
+    await this.createIndex('idx_dead_source_events_channel_id', 'dead_source_events', 'channel_id');
+    await this.createIndex('idx_dead_source_events_created_at', 'dead_source_events', 'created_at');
+    await this.createIndex('idx_profile_migrations_status', 'profile_migrations', 'status');
+    await this.createIndex('idx_resource_history_timestamp', 'resource_history', 'timestamp');
+    await this.createIndex('idx_resource_alerts_created_at', 'resource_alerts', 'created_at');
+    await this.createIndex('idx_actions_channel_id', 'actions', 'channel_id');
+    await this.createIndex('idx_actions_created_at', 'actions', 'created_at');
+    await this.createIndex('idx_actions_type', 'actions', 'action_type');
+    await this.createIndex('idx_stream_health_history_channel_id', 'stream_health_history', 'channel_id');
+    await this.createIndex('idx_stream_health_history_timestamp', 'stream_health_history', 'timestamp');
+    await this.createIndex('idx_stream_health_alerts_channel_id', 'stream_health_alerts', 'channel_id');
+    await this.createIndex('idx_stream_health_alerts_triggered_at', 'stream_health_alerts', 'triggered_at');
+    await this.createIndex('idx_profile_templates_content_type', 'profile_templates', 'content_type');
+    await this.createIndex('idx_transcoding_analytics_channel_id', 'transcoding_analytics', 'channel_id');
+    await this.createIndex('idx_transcoding_analytics_date', 'transcoding_analytics', 'date');
+    await this.createIndex('idx_profile_performance_metrics_profile_id', 'profile_performance_metrics', 'profile_id');
+    await this.createIndex('idx_profile_performance_metrics_timestamp', 'profile_performance_metrics', 'timestamp');
+  }
+
   async insertDefaultProfiles() {
     const now = new Date().toISOString();
     
@@ -488,7 +852,9 @@ class DatabaseInitializer {
     // Verify all required tables exist
     const requiredTables = [
       'devices', 'channels', 'news', 'actions', 'admins',
-      'transcoding_jobs', 'bulk_operations', 'import_logs', 'transcoding_profiles'
+      'transcoding_jobs', 'bulk_operations', 'import_logs', 'transcoding_profiles',
+      'dead_source_events', 'profile_migrations', 'channel_restart_queue', 'resource_history', 'resource_alerts',
+      'stream_health_history', 'stream_health_alerts', 'profile_templates', 'transcoding_analytics', 'profile_performance_metrics'
     ];
     
     for (const table of requiredTables) {

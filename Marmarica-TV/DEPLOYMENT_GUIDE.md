@@ -187,7 +187,7 @@ REACT_APP_MAX_UPLOAD_SIZE=5242880
 # Navigate to server directory
 cd ../server
 
-# Initialize complete database schema with unified script
+# Initialize complete database with ALL features (Phase 1, 2A, 2B)
 node scripts/initialize-database.js
 ```
 
@@ -224,8 +224,25 @@ node scripts/initialize-database.js
 ✓ Created table bulk_operations
 ✓ Created table import_logs
 ✓ Created index idx_bulk_operations_status
-✓ Created index idx_import_logs_bulk_operation
-✓ Created index idx_import_logs_status
+
+🎛️ Transcoding Profiles
+✓ Created table transcoding_profiles
+✓ Added column transcoding_profile_id to channels
+✓ Inserted default profile: Fast (Low Quality)
+✓ Inserted default profile: Balanced
+✓ Inserted default profile: High Quality
+
+🚀 Phase 2A Enhanced Features
+✓ Added column stream_health_status to channels
+✓ Added column profile_recommendation to channels
+✓ Created table stream_health_history
+✓ Created table stream_health_alerts
+✓ Created table profile_templates
+✓ Created table transcoding_analytics
+✓ Inserted profile template: HD Sports
+✓ Inserted profile template: HD Movies
+✓ Inserted profile template: SD News
+✓ Created 20+ performance indexes
 
 📁 Directory Setup
 ✓ Created uploads directory
@@ -236,28 +253,27 @@ node scripts/initialize-database.js
 ✓ All required tables and columns verified
 
 📊 Summary
-✓ Successful operations: 20
+✓ Successful operations: 45+
 ⚠ Warnings: 0
 ❌ Errors: 0
 
 🎉 Database initialization completed successfully!
    Ready to start the application.
-
-Next steps:
-  1. Create admin user: node scripts/manage-admin.js create admin
-  2. Start the server: node index.js
-  3. Or use PM2: pm2 start ecosystem.config.js
 ```
 
 **Verification:**
 ```bash
-# Verify all tables exist
-sqlite3 database.sqlite "SELECT name FROM sqlite_master WHERE type='table';"
-# Should return: devices, channels, news, actions, admins, transcoding_jobs, bulk_operations, import_logs
+# Verify all tables exist (should show 19 tables)
+sqlite3 database.sqlite "SELECT COUNT(*) FROM sqlite_master WHERE type='table';"
+# Should return: 19
 
-# Verify channels table has all required columns
-sqlite3 database.sqlite "PRAGMA table_info(channels);"
-# Should include: transcoding_enabled, transcoded_url, transcoding_status, order_index, last_transcoding_state
+# Verify Phase 2A tables exist
+sqlite3 database.sqlite "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE '%health%';"
+# Should return: stream_health_history, stream_health_alerts
+
+# Verify profile templates are loaded
+sqlite3 database.sqlite "SELECT COUNT(*) FROM profile_templates;"
+# Should return: 5
 
 # Check database integrity
 sqlite3 database.sqlite "PRAGMA integrity_check;"
@@ -272,7 +288,7 @@ sqlite3 database.sqlite "PRAGMA integrity_check;"
 ls -la database.sqlite
 chmod 664 database.sqlite
 
-# Remove corrupted database and retry
+# Remove corrupted database and retry (for fresh deployments)
 rm database.sqlite
 node scripts/initialize-database.js
 ```
@@ -292,6 +308,12 @@ sudo mkdir -p /var/www/html/hls_stream
 sudo chown -R $USER:$USER /var/www/html/hls_stream
 sudo chmod -R 755 /var/www/html/hls_stream
 ```
+
+**Important Notes:**
+- This single script creates the COMPLETE database schema
+- NO additional migration scripts are needed for new deployments
+- All Phase 1, 2A, and 2B features are included
+- The script is safe to run multiple times (idempotent)
 
 ### Step 5: Admin User Creation
 
