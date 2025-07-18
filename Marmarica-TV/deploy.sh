@@ -98,43 +98,62 @@ check_requirements() {
     log "✓ System requirements met"
 }
 
-# Install system dependencies
+# Install system dependencies with intelligent checks
 install_dependencies() {
-    log "Installing system dependencies..."
+    log "Checking system dependencies..."
     
-    # Update package list
-    sudo apt update -y
+    local need_apt_update=false
     
-    # Install build tools first (required for native Node.js packages)
-    log "Installing build essential tools..."
-    sudo apt install -y build-essential python3-dev libnode-dev
-    log "✓ Build tools installed"
+    # Check build tools
+    if ! command -v gcc &> /dev/null || ! command -v make &> /dev/null; then
+        log "Installing build essential tools..."
+        need_apt_update=true
+        sudo apt update -y
+        sudo apt install -y build-essential python3-dev libnode-dev
+        log "✓ Build tools installed"
+    else
+        log "✓ Build tools already installed"
+    fi
     
-    # Install Node.js 18+
+    # Check Node.js 18+
     if ! command -v node &> /dev/null; then
         log "Installing Node.js..."
+        need_apt_update=true
         curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
         sudo apt-get install -y nodejs
+        log "✓ Node.js $(node --version) installed"
+    else
+        local node_version=$(node --version | cut -d'v' -f2 | cut -d'.' -f1)
+        if [[ $node_version -lt 18 ]]; then
+            log "Upgrading Node.js to 18+..."
+            curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+            sudo apt-get install -y nodejs
+            log "✓ Node.js upgraded to $(node --version)"
+        else
+            log "✓ Node.js $(node --version) already installed"
+        fi
     fi
     
-    # Verify Node.js version
-    local node_version=$(node --version | cut -d'v' -f2 | cut -d'.' -f1)
-    if [[ $node_version -lt 18 ]]; then
-        error "Node.js 18+ required. Current version: $(node --version)"
-        exit 1
-    fi
-    log "✓ Node.js $(node --version) installed"
-    
-    # Install FFmpeg
+    # Check FFmpeg
     if ! command -v ffmpeg &> /dev/null; then
         log "Installing FFmpeg..."
+        if [[ "$need_apt_update" == "false" ]]; then
+            sudo apt update -y
+            need_apt_update=true
+        fi
         sudo apt install -y ffmpeg
+        log "✓ FFmpeg $(ffmpeg -version 2>&1 | head -n1 | cut -d' ' -f3) installed"
+    else
+        log "✓ FFmpeg $(ffmpeg -version 2>&1 | head -n1 | cut -d' ' -f3) already installed"
     fi
-    log "✓ FFmpeg $(ffmpeg -version 2>&1 | head -n1 | cut -d' ' -f3) installed"
     
-    # Install Redis for session store
+    # Check Redis
     if ! command -v redis-server &> /dev/null; then
         log "Installing Redis..."
+        if [[ "$need_apt_update" == "false" ]]; then
+            sudo apt update -y
+            need_apt_update=true
+        fi
         sudo apt install -y redis-server
         
         # Configure Redis for production
@@ -146,61 +165,103 @@ install_dependencies() {
         sudo systemctl enable redis-server
         sudo systemctl start redis-server
         sudo systemctl restart redis-server
+        log "✓ Redis $(redis-server --version | cut -d' ' -f3) installed"
+    else
+        log "✓ Redis $(redis-server --version | cut -d' ' -f3) already installed"
+        # Ensure Redis is running
+        if ! systemctl is-active --quiet redis-server; then
+            sudo systemctl start redis-server
+            log "✓ Redis service started"
+        fi
     fi
-    log "✓ Redis $(redis-server --version | cut -d' ' -f3) installed"
     
-    # Install PM2
+    # Check PM2
     if ! command -v pm2 &> /dev/null; then
         log "Installing PM2..."
         sudo npm install -g pm2
+        log "✓ PM2 $(pm2 --version) installed"
+    else
+        log "✓ PM2 $(pm2 --version) already installed"
     fi
-    log "✓ PM2 $(pm2 --version) installed"
     
-    # Install SQLite3
+    # Check SQLite3
     if ! command -v sqlite3 &> /dev/null; then
         log "Installing SQLite3..."
+        if [[ "$need_apt_update" == "false" ]]; then
+            sudo apt update -y
+            need_apt_update=true
+        fi
         sudo apt install -y sqlite3
+        log "✓ SQLite3 installed"
+    else
+        log "✓ SQLite3 already installed"
     fi
-    log "✓ SQLite3 installed"
     
-    # Install Nginx
+    # Check Nginx
     if ! command -v nginx &> /dev/null; then
         log "Installing Nginx..."
+        if [[ "$need_apt_update" == "false" ]]; then
+            sudo apt update -y
+            need_apt_update=true
+        fi
         sudo apt install -y nginx
+        log "✓ Nginx installed"
+    else
+        log "✓ Nginx already installed"
     fi
-    log "✓ Nginx installed"
     
-    # Install additional tools
-    sudo apt install -y curl wget git htop jq
-    log "✓ Additional tools installed"
+    # Check additional tools
+    local tools_to_install=()
+    for tool in curl wget git htop jq; do
+        if ! command -v "$tool" &> /dev/null; then
+            tools_to_install+=("$tool")
+        fi
+    done
+    
+    if [[ ${#tools_to_install[@]} -gt 0 ]]; then
+        log "Installing additional tools: ${tools_to_install[*]}"
+        if [[ "$need_apt_update" == "false" ]]; then
+            sudo apt update -y
+        fi
+        sudo apt install -y "${tools_to_install[@]}"
+        log "✓ Additional tools installed"
+    else
+        log "✓ All additional tools already installed"
+    fi
 }
 
-# Install project dependencies
+# Install project dependencies with intelligent checks
 install_project_dependencies() {
-    log "Installing project dependencies..."
+    log "Checking project dependencies..."
     
     # Install backend dependencies
     cd "$SCRIPT_DIR/server"
-    log "Installing backend dependencies..."
-    npm install
-    
-    # Install Phase 2A specific dependencies
-    log "Installing Phase 2A dependencies..."
+    if [[ ! -d "node_modules" ]] || [[ "package.json" -nt "node_modules" ]]; then
+        log "Installing backend dependencies..."
+        npm install
+        log "✓ Backend dependencies installed"
+    else
+        log "✓ Backend dependencies already up to date"
+    fi
     
     # Ensure axios is installed for stream health monitoring
     if ! npm list axios >/dev/null 2>&1; then
+        log "Installing axios for stream health monitoring..."
         npm install axios
-        log "✓ axios installed for stream health monitoring"
+        log "✓ axios installed"
     else
         log "✓ axios already installed"
     fi
     
-    log "✓ Backend dependencies installed"
-    
     # Install frontend dependencies
     cd "$SCRIPT_DIR/client"
-    log "Installing frontend dependencies..."
-    npm install
+    if [[ ! -d "node_modules" ]] || [[ "package.json" -nt "node_modules" ]]; then
+        log "Installing frontend dependencies..."
+        npm install
+        log "✓ Frontend dependencies installed"
+    else
+        log "✓ Frontend dependencies already up to date"
+    fi
     
     # Ensure dotenv is installed for environment variable loading
     if ! npm list dotenv >/dev/null 2>&1; then
@@ -211,17 +272,25 @@ install_project_dependencies() {
         log "✓ dotenv already installed"
     fi
     
-    log "✓ Frontend dependencies installed"
-    
     cd "$SCRIPT_DIR"
 }
 
-# Create environment files
+# Check and create environment files if needed
 create_environment_files() {
-    log "Creating environment files..."
+    log "Checking environment files..."
     
-    # Create server .env
-    cat > "$SCRIPT_DIR/server/.env" << EOF
+    # Check server .env
+    if [[ -f "$SCRIPT_DIR/server/.env" ]]; then
+        log "✓ Server .env file already exists (using existing configuration)"
+        # Verify it has basic required variables
+        if grep -q "NODE_ENV" "$SCRIPT_DIR/server/.env" && grep -q "PORT" "$SCRIPT_DIR/server/.env"; then
+            log "✓ Server .env file contains required variables"
+        else
+            warning "Server .env file missing required variables, will supplement"
+        fi
+    else
+        log "Creating server .env file..."
+        cat > "$SCRIPT_DIR/server/.env" << EOF
 # Server Configuration
 NODE_ENV=production
 PORT=5000
@@ -285,9 +354,22 @@ MONITORING_INTERVAL=5000
 HISTORY_RETENTION_HOURS=24
 ALERT_COOLDOWN=300000
 EOF
+        log "✓ Server .env file created"
+    fi
     
-    # Create client .env
-    cat > "$SCRIPT_DIR/client/.env" << EOF
+    # Check client .env
+    if [[ -f "$SCRIPT_DIR/client/.env" ]]; then
+        log "✓ Client .env file already exists (using existing configuration)"
+        # Verify it has required React variables
+        if grep -q "REACT_APP_API_URL" "$SCRIPT_DIR/client/.env"; then
+            log "✓ Client .env file contains required variables"
+            # Show what API URL is configured
+            local api_url=$(grep "REACT_APP_API_URL" "$SCRIPT_DIR/client/.env" | cut -d'=' -f2)
+            log "  Current API URL: $api_url"
+        else
+            warning "Client .env file missing REACT_APP_API_URL, will create new one"
+            log "Creating client .env file..."
+            cat > "$SCRIPT_DIR/client/.env" << EOF
 # API Configuration
 REACT_APP_API_URL=http://$SERVER_IP:5000/api
 REACT_APP_API_TIMEOUT=8000
@@ -300,8 +382,25 @@ REACT_APP_MAX_UPLOAD_SIZE=5242880
 # Note: Frontend is now served from the same port as the backend (5000)
 # Access the frontend at: http://$SERVER_IP:5000
 EOF
-    
-    log "✓ Environment files created with enhanced transcoding configuration"
+            log "✓ Client .env file created"
+        fi
+    else
+        log "Creating client .env file..."
+        cat > "$SCRIPT_DIR/client/.env" << EOF
+# API Configuration
+REACT_APP_API_URL=http://$SERVER_IP:5000/api
+REACT_APP_API_TIMEOUT=8000
+REACT_APP_API_RETRIES=2
+
+# Upload Configuration
+REACT_APP_UPLOADS_URL=http://$SERVER_IP:5000/uploads
+REACT_APP_MAX_UPLOAD_SIZE=5242880
+
+# Note: Frontend is now served from the same port as the backend (5000)
+# Access the frontend at: http://$SERVER_IP:5000
+EOF
+        log "✓ Client .env file created"
+    fi
 }
 
 # Setup directories
@@ -329,19 +428,66 @@ setup_directories() {
     log "✓ Backup directory created"
 }
 
-# Initialize complete database with all features
+# Initialize complete database with all features (intelligent check)
 initialize_database() {
-    log "Initializing complete database with all features..."
+    log "Checking database initialization..."
     
     cd "$SCRIPT_DIR/server"
     
-    # Run unified database initialization script that includes all features
-    if [[ -f "scripts/initialize-database.js" ]]; then
-        node scripts/initialize-database.js
-        log "✓ Complete database initialized with all Phase 1, 2A, and 2B features"
+    # Check if database already exists and has correct schema
+    if [[ -f "database.sqlite" ]]; then
+        log "Database file exists, checking schema..."
+        
+        # Check table count
+        local table_count=$(sqlite3 database.sqlite "SELECT COUNT(*) FROM sqlite_master WHERE type='table';" 2>/dev/null || echo "0")
+        
+        # Check for key tables that indicate a complete database
+        local key_tables=("devices" "channels" "news" "admins" "transcoding_profiles" "stream_health_history" "profile_templates")
+        local missing_tables=()
+        
+        for table in "${key_tables[@]}"; do
+            local exists=$(sqlite3 database.sqlite "SELECT name FROM sqlite_master WHERE type='table' AND name='$table';" 2>/dev/null)
+            if [[ -z "$exists" ]]; then
+                missing_tables+=("$table")
+            fi
+        done
+        
+        if [[ $table_count -ge 15 ]] && [[ ${#missing_tables[@]} -eq 0 ]]; then
+            log "✓ Database already properly initialized with $table_count tables"
+            
+            # Check if admin user exists
+            local admin_count=$(sqlite3 database.sqlite "SELECT COUNT(*) FROM admins WHERE username='admin';" 2>/dev/null || echo "0")
+            if [[ $admin_count -gt 0 ]]; then
+                log "✓ Admin user already exists"
+            else
+                log "Admin user missing, will create..."
+            fi
+        else
+            if [[ ${#missing_tables[@]} -gt 0 ]]; then
+                log "Missing tables detected: ${missing_tables[*]}"
+            fi
+            log "Database incomplete, running initialization..."
+            
+            # Run database initialization
+            if [[ -f "scripts/initialize-database.js" ]]; then
+                node scripts/initialize-database.js
+                log "✓ Database initialization completed"
+            else
+                error "Database initialization script not found"
+                exit 1
+            fi
+        fi
     else
-        error "Database initialization script not found"
-        exit 1
+        log "Database file not found, creating new database..."
+        
+        # Run unified database initialization script that includes all features
+        if [[ -f "scripts/initialize-database.js" ]]; then
+            node scripts/initialize-database.js
+            log "✓ Complete database initialized with all Phase 1, 2A, and 2B features"
+        else
+            error "Database initialization script not found"
+            exit 1
+        fi
     fi
     
     cd "$SCRIPT_DIR"
@@ -623,25 +769,46 @@ test_phase1_url_preservation() {
     fi
 }
 
-# Create admin user
+# Create admin user (intelligent check)
 create_admin_user() {
-    log "Creating admin user..."
+    log "Checking admin user..."
     
     cd "$SCRIPT_DIR/server"
     
-    # Create admin user with default password
-    if [[ -f "scripts/manage-admin.js" ]]; then
-        node scripts/manage-admin.js create admin
-        log "✓ Admin user created"
-        
-        # Show admin credentials
-        if [[ -f "admin-credentials.txt" ]]; then
-            info "Admin credentials:"
-            cat admin-credentials.txt
+    # Check if admin user already exists
+    if [[ -f "database.sqlite" ]]; then
+        local admin_count=$(sqlite3 database.sqlite "SELECT COUNT(*) FROM admins WHERE username='admin';" 2>/dev/null || echo "0")
+        if [[ $admin_count -gt 0 ]]; then
+            log "✓ Admin user already exists"
+            
+            # Show existing credentials if file exists
+            if [[ -f "admin-credentials.txt" ]]; then
+                info "Admin credentials:"
+                cat admin-credentials.txt
+            else
+                info "Admin user exists but credentials file not found"
+                info "Use 'node scripts/manage-admin.js reset-password admin' to reset password"
+            fi
+        else
+            log "Admin user not found, creating..."
+            
+            # Create admin user with default password
+            if [[ -f "scripts/manage-admin.js" ]]; then
+                node scripts/manage-admin.js create admin
+                log "✓ Admin user created"
+                
+                # Show admin credentials
+                if [[ -f "admin-credentials.txt" ]]; then
+                    info "Admin credentials:"
+                    cat admin-credentials.txt
+                fi
+            else
+                error "Admin management script not found"
+                exit 1
+            fi
         fi
     else
-        error "Admin management script not found"
-        exit 1
+        log "Database not found, admin user will be created during database initialization"
     fi
     
     cd "$SCRIPT_DIR"
