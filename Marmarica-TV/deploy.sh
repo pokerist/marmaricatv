@@ -201,6 +201,16 @@ install_project_dependencies() {
     cd "$SCRIPT_DIR/client"
     log "Installing frontend dependencies..."
     npm install
+    
+    # Ensure dotenv is installed for environment variable loading
+    if ! npm list dotenv >/dev/null 2>&1; then
+        log "Installing dotenv for environment variable loading..."
+        npm install dotenv
+        log "✓ dotenv installed"
+    else
+        log "✓ dotenv already installed"
+    fi
+    
     log "✓ Frontend dependencies installed"
     
     cd "$SCRIPT_DIR"
@@ -637,15 +647,59 @@ create_admin_user() {
     cd "$SCRIPT_DIR"
 }
 
-# Build frontend
+# Build frontend with environment variable validation
 build_frontend() {
-    log "Building frontend..."
+    log "Building frontend with environment variable validation..."
     
     cd "$SCRIPT_DIR/client"
     
-    # Build React app
-    npm run build
-    log "✓ Frontend built successfully"
+    # Verify environment file exists
+    if [[ ! -f ".env" ]]; then
+        error "Client .env file not found before build"
+        exit 1
+    fi
+    
+    # Display environment variables for debugging
+    log "Environment variables that will be used in build:"
+    grep "REACT_APP_" .env | while read line; do
+        log "  $line"
+    done
+    
+    # Verify Node.js can access environment variables
+    log "Verifying environment variable accessibility..."
+    local env_test=$(node -e "
+        require('dotenv').config();
+        console.log('API_URL:', process.env.REACT_APP_API_URL || 'UNDEFINED');
+        console.log('UPLOADS_URL:', process.env.REACT_APP_UPLOADS_URL || 'UNDEFINED');
+        if (!process.env.REACT_APP_API_URL || !process.env.REACT_APP_UPLOADS_URL) {
+            console.error('ERROR: Environment variables not properly loaded');
+            process.exit(1);
+        }
+    " 2>&1)
+    
+    if [[ "$env_test" == *"ERROR"* ]]; then
+        error "Environment variables not accessible to Node.js:"
+        error "$env_test"
+        exit 1
+    fi
+    
+    log "✓ Environment variables verified:"
+    echo "$env_test" | while read line; do
+        log "  $line"
+    done
+    
+    # Clear any existing build
+    log "Clearing previous build..."
+    rm -rf build
+    
+    # Build React app with explicit environment loading
+    log "Building React application..."
+    if npm run build; then
+        log "✓ React build completed successfully"
+    else
+        error "React build failed"
+        exit 1
+    fi
     
     # Verify build directory
     if [[ -d "build" ]]; then
@@ -655,6 +709,48 @@ build_frontend() {
         error "Frontend build failed - no build directory found"
         exit 1
     fi
+    
+    # Verify build contains correct API URLs
+    log "Verifying build contains correct API URLs..."
+    local main_js=$(find build/static/js -name "main.*.js" | head -1)
+    if [[ -n "$main_js" ]]; then
+        log "Checking main JS file: $(basename $main_js)"
+        
+        # Check if the API URL is in the built file
+        if grep -q "http://$SERVER_IP:5000" "$main_js"; then
+            log "✓ Build contains correct API URL (http://$SERVER_IP:5000)"
+        else
+            error "Build does not contain correct API URL!"
+            log "Expected: http://$SERVER_IP:5000"
+            log "Checking what URLs are in the build..."
+            
+            # Extract potential URLs from the build for debugging
+            local urls=$(grep -o 'http[s]*://[^"]*' "$main_js" | head -5)
+            if [[ -n "$urls" ]]; then
+                log "Found URLs in build:"
+                echo "$urls" | while read url; do
+                    log "  $url"
+                done
+            else
+                log "No HTTP URLs found in build file"
+            fi
+            
+            exit 1
+        fi
+    else
+        error "Could not find main JS file in build"
+        exit 1
+    fi
+    
+    # Additional verification - check index.html
+    if [[ -f "build/index.html" ]]; then
+        log "✓ Build index.html exists"
+    else
+        error "Build index.html missing"
+        exit 1
+    fi
+    
+    log "✓ Frontend build verification completed successfully"
     
     cd "$SCRIPT_DIR"
 }
@@ -896,6 +992,36 @@ run_verification() {
     else
         error "Frontend build not found"
         return 1
+    fi
+    
+    # Test frontend environment variable integration
+    log "Testing frontend environment variable integration..."
+    local frontend_response=$(curl -s "http://localhost:5000/" || echo "failed")
+    if [[ "$frontend_response" == *"<!DOCTYPE html>"* ]]; then
+        log "✓ Frontend serving HTML correctly"
+    else
+        error "Frontend not serving HTML correctly"
+        return 1
+    fi
+    
+    # Test frontend routing
+    local login_response=$(curl -s "http://localhost:5000/login" || echo "failed")
+    if [[ "$login_response" == *"<!DOCTYPE html>"* ]]; then
+        log "✓ Frontend routing working"
+    else
+        error "Frontend routing failed"
+        return 1
+    fi
+    
+    # Test that the built frontend doesn't contain malformed URLs
+    local main_js_path=$(find "$SCRIPT_DIR/client/build/static/js" -name "main.*.js" | head -1)
+    if [[ -n "$main_js_path" ]]; then
+        if grep -q "scripts/verify.shy" "$main_js_path"; then
+            error "Frontend build contains malformed URLs (scripts/verify.shy found)"
+            return 1
+        else
+            log "✓ Frontend build does not contain malformed URLs"
+        fi
     fi
     
     cd "$SCRIPT_DIR"
