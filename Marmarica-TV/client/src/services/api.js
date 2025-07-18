@@ -2,10 +2,10 @@ import axios from 'axios';
 import { toast } from 'react-toastify';
 
 // Get environment variables with fallbacks for safety
-const API_URL = process.env.REACT_APP_API_URL || 'http://155.138.231.215:5000/api';
+const API_URL = process.env.REACT_APP_API_URL || 'http://192.168.1.15:5000/api';
 const API_TIMEOUT = parseInt(process.env.REACT_APP_API_TIMEOUT || '8000', 10);
 const API_RETRIES = parseInt(process.env.REACT_APP_API_RETRIES || '2', 10);
-const UPLOADS_URL = process.env.REACT_APP_UPLOADS_URL || 'http://155.138.231.215:5000/uploads';
+const UPLOADS_URL = process.env.REACT_APP_UPLOADS_URL || 'http://192.168.1.15:5000/uploads';
 
 // Create axios instance with base URL from env
 const api = axios.create({

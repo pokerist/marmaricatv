@@ -6,7 +6,7 @@ const { db } = require('../index');
 // Configuration
 const HLS_OUTPUT_BASE = process.env.HLS_OUTPUT_BASE || '/var/www/html/hls_stream';
 const FFMPEG_PATH = process.env.FFMPEG_PATH || 'ffmpeg';
-const SERVER_BASE_URL = process.env.SERVER_BASE_URL || 'http://155.138.231.215';
+const SERVER_BASE_URL = process.env.SERVER_BASE_URL || 'http://192.168.1.15';
 
 // Cleanup configuration
 const CLEANUP_INTERVAL = parseInt(process.env.CLEANUP_INTERVAL) || 5 * 60 * 1000; // 5 minutes

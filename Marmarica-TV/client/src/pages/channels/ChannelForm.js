@@ -54,7 +54,7 @@ const ChannelForm = () => {
           
           // Set logo preview if exists
           if (response.data.data.logo_url) {
-            setLogoPreview(`http://155.138.231.215:5000${response.data.data.logo_url}`);
+            setLogoPreview(`http://192.168.1.15:5000${response.data.data.logo_url}`);
           }
         } catch (error) {
           console.error('Error fetching channel:', error);
