@@ -7,6 +7,8 @@ const { db } = require('../index');
 const HLS_OUTPUT_BASE = process.env.HLS_OUTPUT_BASE || '/var/www/html/hls_stream';
 const FFMPEG_PATH = process.env.FFMPEG_PATH || 'ffmpeg';
 const SERVER_BASE_URL = process.env.SERVER_BASE_URL || 'http://192.168.1.15';
+// HLS streams are served by nginx on port 80, not the Express server
+const HLS_BASE_URL = process.env.HLS_BASE_URL || process.env.SERVER_BASE_URL?.replace(':5000', '') || 'http://192.168.1.15';
 
 // Cleanup configuration
 const CLEANUP_INTERVAL = parseInt(process.env.CLEANUP_INTERVAL) || 5 * 60 * 1000; // 5 minutes
@@ -190,9 +192,9 @@ const generateFFmpegCommand = async (inputUrl, channelId, profileId = null) => {
     const profile = await getTranscodingProfile(profileId);
     console.log(`Using transcoding profile: ${profile.name} (ID: ${profile.id})`);
 
-    // Use profile-defined filenames or fallback to defaults
+    // Use profile-defined filenames or fallback to defaults (force .ts for mpegts)
     const manifestFilename = profile.manifest_filename || 'output.m3u8';
-    const segmentFilename = profile.hls_segment_filename || 'output_%d.m4s';
+    const segmentFilename = profile.hls_segment_filename || 'output_%d.ts';
     
     const outputPath = path.join(outputDir, manifestFilename);
     const segmentPath = path.join(outputDir, segmentFilename);
@@ -210,11 +212,12 @@ const generateFFmpegCommand = async (inputUrl, channelId, profileId = null) => {
       '-f', 'hls',
       '-hls_time', profile.hls_time.toString(),
       '-hls_playlist_type', '2',
-      '-hls_segment_type', profile.hls_segment_type || 'fmp4',
-      '-hls_flags', profile.hls_flags || 'delete_segments+split_by_time+independent_segments',
+      '-hls_segment_type', 'mpegts', // Force mpegts for consistency with TVHeadend
+      '-hls_flags', profile.hls_flags || 'delete_segments+program_date_time+independent_segments+split_by_time',
       '-hls_segment_filename', segmentPath,
       '-hls_start_number_source', 'epoch',
-      '-hls_list_size', Math.max(profile.hls_list_size, 4).toString(),
+      '-hls_list_size', Math.max(profile.hls_list_size, 6).toString(), // Minimum 6 for live streams
+      '-hls_delete_threshold', '1',
       outputPath
     ];
 
@@ -380,7 +383,7 @@ const startTranscoding = async (channelId, inputUrl, channelName) => {
         // Process completed successfully
         const manifestFilename = profile.manifest_filename || 'output.m3u8';
         await updateJobStatus(jobId, 'completed');
-        await updateChannelStatus(channelId, 'active', `${SERVER_BASE_URL}/hls_stream/channel_${channelId}/${manifestFilename}`);
+        await updateChannelStatus(channelId, 'active', `${HLS_BASE_URL}/hls_stream/channel_${channelId}/${manifestFilename}`);
         logAction('transcoding_completed', `Transcoding completed for channel: ${channelName} using profile: ${profile.name}`);
       } else {
         // Process failed
@@ -406,7 +409,7 @@ const startTranscoding = async (channelId, inputUrl, channelName) => {
     setTimeout(async () => {
       if (activeProcesses.has(channelId)) {
         const manifestFilename = profile.manifest_filename || 'output.m3u8';
-        await updateChannelStatus(channelId, 'active', `${SERVER_BASE_URL}/hls_stream/channel_${channelId}/${manifestFilename}`);
+        await updateChannelStatus(channelId, 'active', `${HLS_BASE_URL}/hls_stream/channel_${channelId}/${manifestFilename}`);
         logAction('transcoding_started', `Transcoding started for channel: ${channelName} using profile: ${profile.name}`);
       }
     }, 2000);

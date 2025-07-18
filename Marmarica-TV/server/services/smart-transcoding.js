@@ -16,6 +16,8 @@ class SmartTranscodingEngine {
     this.hlsOutputBase = process.env.HLS_OUTPUT_BASE || '/var/www/html/hls_stream';
     this.ffmpegPath = process.env.FFMPEG_PATH || 'ffmpeg';
     this.serverBaseUrl = process.env.SERVER_BASE_URL || 'http://192.168.1.15';
+    // HLS streams are served by nginx on port 80, not the Express server
+    this.hlsBaseUrl = process.env.HLS_BASE_URL || process.env.SERVER_BASE_URL?.replace(':5000', '') || 'http://192.168.1.15';
     this.enableSmartMode = process.env.ENABLE_SMART_TRANSCODING !== 'false';
     
     // Active processes tracking
@@ -255,7 +257,7 @@ class SmartTranscodingEngine {
     // Update channel status after brief delay
     setTimeout(async () => {
       if (this.activeProcesses.has(channelId)) {
-        const manifestUrl = `${this.serverBaseUrl}/hls_stream/channel_${channelId}/${profile.manifest_filename}`;
+        const manifestUrl = `${this.hlsBaseUrl}/hls_stream/channel_${channelId}/${profile.manifest_filename}`;
         await this.updateChannelStatus(channelId, 'active', manifestUrl);
       }
     }, 3000);
@@ -319,6 +321,48 @@ class SmartTranscodingEngine {
     }
   }
 
+  // Helper function to ensure mandatory cleanup flags are present
+  ensureMandatoryCleanupFlags(command) {
+    const mandatoryFlags = [
+      'delete_segments',
+      'program_date_time',
+      'independent_segments',
+      'split_by_time'
+    ];
+
+    // Find the -hls_flags parameter
+    const hlsFlagsIndex = command.findIndex(arg => arg === '-hls_flags');
+    
+    if (hlsFlagsIndex !== -1 && hlsFlagsIndex + 1 < command.length) {
+      const currentFlags = command[hlsFlagsIndex + 1].split('+');
+      const missingFlags = mandatoryFlags.filter(flag => !currentFlags.includes(flag));
+      
+      if (missingFlags.length > 0) {
+        // Add missing flags
+        command[hlsFlagsIndex + 1] = [...currentFlags, ...missingFlags].join('+');
+        console.log(`Added missing mandatory HLS flags: ${missingFlags.join('+')}`);
+      }
+    } else {
+      // Add -hls_flags if not present
+      const hlsTimeIndex = command.findIndex(arg => arg === '-hls_time');
+      if (hlsTimeIndex !== -1) {
+        command.splice(hlsTimeIndex, 0, '-hls_flags', mandatoryFlags.join('+'));
+      } else {
+        command.push('-hls_flags', mandatoryFlags.join('+'));
+      }
+      console.log('Added mandatory HLS flags to command');
+    }
+
+    // Ensure -hls_delete_threshold is present
+    const deleteThresholdIndex = command.findIndex(arg => arg === '-hls_delete_threshold');
+    if (deleteThresholdIndex === -1) {
+      command.push('-hls_delete_threshold', '1');
+      console.log('Added mandatory hls_delete_threshold to command');
+    }
+
+    return command;
+  }
+
   // Generate FFmpeg command from profile
   generateFFmpegCommand(inputUrl, channelId, profile) {
     const outputPath = path.join(this.hlsOutputBase, `channel_${channelId}`, profile.manifest_filename);
@@ -337,11 +381,12 @@ class SmartTranscodingEngine {
       '-b:a', profile.audio_bitrate,
       '-f', 'hls',
       '-hls_time', profile.hls_time.toString(),
-      '-hls_list_size', profile.hls_list_size.toString(),
-      '-hls_segment_type', profile.hls_segment_type,
-      '-hls_flags', profile.hls_flags,
+      '-hls_list_size', Math.max(profile.hls_list_size, 6).toString(), // Minimum 6 for live streams
+      '-hls_segment_type', 'mpegts', // Force mpegts for consistency
+      '-hls_flags', profile.hls_flags || 'delete_segments+program_date_time+independent_segments+split_by_time',
       '-hls_segment_filename', segmentPath,
       '-hls_start_number_source', 'epoch',
+      '-hls_delete_threshold', '1',
       outputPath
     ];
     
@@ -389,6 +434,9 @@ class SmartTranscodingEngine {
       command.splice(insertIndex, 0, ...additionalArgs);
     }
     
+    // Ensure mandatory cleanup flags are present (this is non-negotiable for live streams)
+    command = this.ensureMandatoryCleanupFlags(command);
+    
     return command;
   }
 
@@ -423,7 +471,7 @@ class SmartTranscodingEngine {
       if (code === 0) {
         // Success
         await this.updateJobStatus(jobId, 'completed');
-        const manifestUrl = `${this.serverBaseUrl}/hls_stream/channel_${channelId}/${profile.manifest_filename}`;
+        const manifestUrl = `${this.hlsBaseUrl}/hls_stream/channel_${channelId}/${profile.manifest_filename}`;
         await this.updateChannelStatus(channelId, 'active', manifestUrl);
         
         // Record success for learning
