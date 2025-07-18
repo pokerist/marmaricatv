@@ -386,7 +386,6 @@ class SmartTranscodingEngine {
       '-hls_flags', profile.hls_flags || 'delete_segments+program_date_time+independent_segments+split_by_time',
       '-hls_segment_filename', segmentPath,
       '-hls_start_number_source', 'epoch',
-      '-hls_delete_threshold', '1',
       outputPath
     ];
     

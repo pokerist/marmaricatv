@@ -550,7 +550,6 @@ const generateFFmpegCommand = async (inputUrl, channelId, profileId = null, isRe
       '-hls_segment_filename', segmentPath,
       '-hls_start_number_source', 'epoch',
       '-hls_list_size', Math.max(profile.hls_list_size, 6).toString(), // Minimum 6 for live streams
-      '-hls_delete_threshold', '1',
       outputPath
     ];
 
