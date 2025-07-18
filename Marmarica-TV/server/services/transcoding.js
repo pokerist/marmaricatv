@@ -211,7 +211,7 @@ const generateFFmpegCommand = async (inputUrl, channelId, profileId = null) => {
       '-b:a', profile.audio_bitrate,
       '-f', 'hls',
       '-hls_time', profile.hls_time.toString(),
-      '-hls_playlist_type', '2',
+      //'-hls_playlist_type', '2',
       '-hls_segment_type', 'mpegts', // Force mpegts for consistency with TVHeadend
       '-hls_flags', profile.hls_flags || 'delete_segments+program_date_time+independent_segments+split_by_time',
       '-hls_segment_filename', segmentPath,
