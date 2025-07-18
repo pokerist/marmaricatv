@@ -12,6 +12,7 @@ import BulkTranscodingModal from '../../components/BulkTranscodingModal';
 import DeleteAllChannelsModal from '../../components/DeleteAllChannelsModal';
 import StreamHealthIndicator from '../../components/StreamHealthIndicator';
 import ProfileRecommendationBadge from '../../components/ProfileRecommendationBadge';
+import SmartTranscodingStatus from '../../components/SmartTranscodingStatus';
 
 const ChannelsList = () => {
   const [channels, setChannels] = useState([]);
@@ -607,76 +608,12 @@ const ChannelsList = () => {
                           />
                         </td>
                         <td>
-                          <div className="d-flex flex-column gap-1">
-                            {/* Transcoding Status */}
-                            <div>
-                              {channel.transcoding_enabled ? (
-                                channel.transcoding_status === 'active' ? (
-                                  <Badge bg="success">
-                                    <FaPlay className="me-1" />
-                                    Active
-                                  </Badge>
-                                ) : channel.transcoding_status === 'starting' ? (
-                                  <Badge bg="warning">
-                                    <FaSync className="me-1" />
-                                    Starting
-                                  </Badge>
-                                ) : channel.transcoding_status === 'stopping' ? (
-                                  <Badge bg="warning">
-                                    <FaStop className="me-1" />
-                                    Stopping
-                                  </Badge>
-                                ) : channel.transcoding_status === 'failed' ? (
-                                  <Badge bg="danger">
-                                    Failed
-                                  </Badge>
-                                ) : (
-                                  <Badge bg="secondary">
-                                    Inactive
-                                  </Badge>
-                                )
-                              ) : (
-                                <Badge bg="secondary">
-                                  Disabled
-                                </Badge>
-                              )}
-                            </div>
-                            
-                            {/* Transcoding Controls */}
-                            {channel.transcoding_enabled && (
-                              <div className="d-flex gap-1">
-                                {channel.transcoding_status === 'active' && (
-                                  <Button
-                                    variant="outline-warning"
-                                    size="sm"
-                                    onClick={() => handleRestartTranscoding(channel.id)}
-                                    title="Restart Transcoding"
-                                  >
-                                    <FaSync />
-                                  </Button>
-                                )}
-                                <Button
-                                  variant="outline-danger"
-                                  size="sm"
-                                  onClick={() => handleToggleTranscoding(channel.id, false)}
-                                  title="Disable Transcoding"
-                                >
-                                  <FaStop />
-                                </Button>
-                              </div>
-                            )}
-                            
-                            {!channel.transcoding_enabled && (
-                              <Button
-                                variant="outline-success"
-                                size="sm"
-                                onClick={() => handleToggleTranscoding(channel.id, true)}
-                                title="Enable Transcoding"
-                              >
-                                <FaPlay />
-                              </Button>
-                            )}
-                          </div>
+                          <SmartTranscodingStatus 
+                            channel={channel}
+                            onTranscodingToggle={handleToggleTranscoding}
+                            onTranscodingRestart={handleRestartTranscoding}
+                            isActionPending={transcodingActions.has(channel.id)}
+                          />
                         </td>
                         <td>
                           <div className="d-flex gap-2">

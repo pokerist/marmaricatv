@@ -201,12 +201,48 @@ export const channelsAPI = {
 export const transcodingAPI = {
   getActiveJobs: () => retryRequest(() => api.get('/transcoding/jobs')),
   getTranscodingStatus: (channelId) => retryRequest(() => api.get(`/transcoding/status/${channelId}`)),
-  startTranscoding: (channelId) => retryRequest(() => api.post(`/transcoding/start/${channelId}`)),
+  startTranscoding: (channelId, options = {}) => retryRequest(() => api.post(`/transcoding/start/${channelId}`, options)),
   stopTranscoding: (channelId) => retryRequest(() => api.post(`/transcoding/stop/${channelId}`)),
   restartTranscoding: (channelId) => retryRequest(() => api.post(`/transcoding/restart/${channelId}`)),
   toggleTranscoding: (channelId, enabled) => retryRequest(() => api.post(`/transcoding/toggle/${channelId}`, { enabled })),
   getTranscodingHistory: (channelId, limit = 10) => retryRequest(() => api.get(`/transcoding/history/${channelId}?limit=${limit}`)),
   getTranscodingStats: () => retryRequest(() => api.get('/transcoding/stats')),
+};
+
+// Smart Transcoding API
+export const smartTranscodingAPI = {
+  // Stream analysis
+  analyzeStream: (channelId, forceRefresh = false) => 
+    retryRequest(() => api.post(`/smart-transcoding/analyze/${channelId}`, { forceRefresh })),
+  
+  // Dynamic profile generation
+  generateProfile: (channelId, options = {}) => 
+    retryRequest(() => api.post(`/smart-transcoding/profile/${channelId}`, { options })),
+  
+  // Core transcoding operations
+  startTranscoding: (channelId, options = {}) => 
+    retryRequest(() => api.post(`/smart-transcoding/start/${channelId}`, { options })),
+  stopTranscoding: (channelId) => 
+    retryRequest(() => api.post(`/smart-transcoding/stop/${channelId}`)),
+  
+  // System statistics and monitoring
+  getSystemStats: () => retryRequest(() => api.get('/smart-transcoding/stats')),
+  getChannelHealth: (channelId) => retryRequest(() => api.get(`/smart-transcoding/health/${channelId}`)),
+  
+  // Fallback management
+  getFallbackStats: (channelId) => retryRequest(() => api.get(`/smart-transcoding/fallback/${channelId}`)),
+  resetFallbackTracking: (channelId) => retryRequest(() => api.post(`/smart-transcoding/fallback/reset/${channelId}`)),
+  
+  // Analysis cache management
+  getCachedAnalysis: (channelId) => retryRequest(() => api.get(`/smart-transcoding/cache/${channelId}`)),
+  clearAnalysisCache: (channelId) => retryRequest(() => api.delete(`/smart-transcoding/cache/${channelId}`)),
+  
+  // Bulk operations
+  bulkStartTranscoding: (channelIds, options = {}) => 
+    retryRequest(() => api.post('/smart-transcoding/bulk/start', { channelIds, options })),
+  
+  // System initialization
+  initializeSystem: () => retryRequest(() => api.post('/smart-transcoding/init')),
 };
 
 // Transcoding Profiles API

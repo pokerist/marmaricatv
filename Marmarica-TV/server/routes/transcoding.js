@@ -2,6 +2,17 @@ const express = require('express');
 const router = express.Router();
 const { db } = require('../index');
 const transcodingService = require('../services/transcoding');
+const SmartTranscodingEngine = require('../services/smart-transcoding');
+
+// Initialize smart transcoding engine
+const smartTranscodingEngine = new SmartTranscodingEngine();
+
+// Initialize smart transcoding engine with database
+const initSmartTranscoding = () => {
+  if (!smartTranscodingEngine.db) {
+    smartTranscodingEngine.setDatabase(db);
+  }
+};
 
 // Helper function to handle async routes
 function asyncHandler(fn) {
@@ -75,12 +86,13 @@ router.get('/status/:channelId', asyncHandler(async (req, res) => {
 // Start transcoding for a channel
 router.post('/start/:channelId', asyncHandler(async (req, res) => {
   const { channelId } = req.params;
+  const { useSmartTranscoding = null, options = {} } = req.body;
   
   try {
     // Get channel info
     const channel = await new Promise((resolve, reject) => {
       db.get(
-        'SELECT id, name, url, transcoding_enabled FROM channels WHERE id = ?',
+        'SELECT id, name, url, transcoding_enabled, smart_transcoding_enabled FROM channels WHERE id = ?',
         [channelId],
         (err, row) => {
           if (err) {
@@ -100,16 +112,36 @@ router.post('/start/:channelId', asyncHandler(async (req, res) => {
       return res.status(400).json({ error: 'Transcoding is not enabled for this channel' });
     }
     
-    // Start transcoding
-    const result = await transcodingService.startTranscoding(
-      channel.id,
-      channel.url,
-      channel.name
-    );
+    // Determine which transcoding method to use
+    const shouldUseSmartTranscoding = useSmartTranscoding !== null ? 
+      useSmartTranscoding : 
+      (channel.smart_transcoding_enabled !== 0 && process.env.ENABLE_SMART_TRANSCODING !== 'false');
+    
+    let result;
+    if (shouldUseSmartTranscoding) {
+      // Use smart transcoding
+      initSmartTranscoding();
+      result = await smartTranscodingEngine.startSmartTranscoding(
+        channel.id,
+        channel.url,
+        channel.name,
+        options
+      );
+    } else {
+      // Use traditional transcoding
+      result = await transcodingService.startTranscoding(
+        channel.id,
+        channel.url,
+        channel.name
+      );
+    }
     
     res.json({
       message: 'Transcoding started successfully',
-      data: result
+      data: {
+        ...result,
+        transcoding_mode: shouldUseSmartTranscoding ? 'smart' : 'traditional'
+      }
     });
     
   } catch (error) {

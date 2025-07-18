@@ -178,6 +178,7 @@ const enhancedTranscodingRoutes = require('./routes/enhanced-transcoding');
 const optimizedTranscodingRoutes = require('./routes/optimized-transcoding');
 const streamHealthRoutes = require('./routes/stream-health');
 const profileTemplatesRoutes = require('./routes/profile-templates');
+const smartTranscodingRoutes = require('./routes/smart-transcoding');
 
 // Initialize auth table
 const { initializeAuthTable } = require('./controllers/auth');
@@ -199,6 +200,7 @@ app.use('/api/enhanced-transcoding', isAuthenticated, enhancedTranscodingRoutes)
 app.use('/api/optimized-transcoding', isAuthenticated, optimizedTranscodingRoutes);
 app.use('/api/stream-health', isAuthenticated, streamHealthRoutes);
 app.use('/api/profile-templates', isAuthenticated, profileTemplatesRoutes);
+app.use('/api/smart-transcoding', isAuthenticated, smartTranscodingRoutes);
 app.use('/api/client', clientRoutes); // Client routes remain open
 
 // Health check route
@@ -307,6 +309,10 @@ const optimizedTranscodingService = require('./services/optimized-transcoding');
 // Phase 2A services
 const streamHealthMonitor = require('./services/stream-health-monitor');
 const profileTemplateManager = require('./services/profile-template-manager');
+
+// Smart transcoding services
+const SmartTranscodingEngine = require('./services/smart-transcoding');
+const SmartTranscodingSchema = require('./scripts/smart-transcoding-schema');
 
 // Enhanced server initialization with fallbacks
 async function initializeEnhancedServices() {
@@ -419,6 +425,23 @@ async function initializeEnhancedServices() {
       console.log('Profile template management initialized');
     } catch (error) {
       console.warn('Profile template management initialization failed:', error.message);
+    }
+    
+    // 8. Initialize smart transcoding system
+    try {
+      console.log('Initializing smart transcoding system...');
+      
+      // Initialize schema
+      const smartTranscodingSchema = new SmartTranscodingSchema();
+      await smartTranscodingSchema.runAllUpdates();
+      
+      // Initialize smart transcoding engine
+      const smartTranscodingEngine = new SmartTranscodingEngine();
+      smartTranscodingEngine.setDatabase(db);
+      
+      console.log('Smart transcoding system initialized');
+    } catch (error) {
+      console.warn('Smart transcoding system initialization failed:', error.message);
     }
     
     console.log('All services initialized successfully!');
