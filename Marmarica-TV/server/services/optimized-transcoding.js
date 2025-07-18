@@ -408,7 +408,7 @@ const generateOptimizedFFmpegCommand = async (inputUrl, channelId, profileId = n
       // HLS output settings
       '-f', 'hls',
       '-hls_time', profile.hls_time.toString(),
-      '-hls_playlist_type', 'live',
+      '-hls_playlist_type', '2',
       '-hls_list_size', Math.max(profile.hls_list_size, 3).toString(),
       '-hls_segment_type', profile.hls_segment_type || 'mpegts',
       
