@@ -1,64 +1,78 @@
-# Marmarica TV - Complete Deployment Guide
+# Marmarica TV - Simplified Deployment Guide
 
-This guide provides step-by-step instructions for deploying the Marmarica TV IPTV Management Panel from scratch on a new server.
+## Overview
 
-## 🚀 Quick Start (Automated Deployment)
+This guide will help you deploy the simplified Marmarica TV IPTV management system from scratch. The system has been streamlined to focus on core functionality while maintaining reliability.
 
-**New! One-command deployment:**
+## What's New - Simplified Approach
 
+### ✅ Improvements Made:
+- **Simplified Transcoding**: Uses a single, optimized FFmpeg template with LL-HLS support
+- **Real Health Monitoring**: Stream health now reflects actual status (not always 50%)
+- **Automatic Failure Handling**: Stream status updates automatically when streams fail
+- **Memory Efficient**: Optimized cleanup and resource management
+- **Consistent Operation**: Maintains transcoding regardless of stream errors
+- **Better UX**: Streams that fail are automatically marked as offline
 
+### 🔧 Default FFmpeg Template:
+The system now uses this optimized template by default:
 ```bash
-# Clone repository
-git clone https://github.com/pokerist/marmaricatv.git
-cd marmaricatv
-git fetch origin && git branch -r && git checkout -b marmarica origin/marmarica && git pull origin marmarica
-
-cd Marmarica-TV
-
-# Run automated deployment
-chmod +x deploy.sh
-./deploy.sh
-
-# Verify deployment
-chmod +x scripts/verify.sh
-./scripts/verify.sh
+ffmpeg -fflags nobuffer -flags low_delay \
+       -i "INPUT_URL" \
+       -c:v libx264 -preset ultrafast -tune zerolatency -crf 23 \
+       -g 15 -keyint_min 15 \
+       -c:a aac -b:a 64k \
+       -hls_time 0.5 -hls_list_size 1 -hls_flags delete_segments+append_list+omit_endlist+independent_segments \
+       -hls_playlist_type event \
+       -start_number 1 \
+       -f hls "output.m3u8"
 ```
 
-**That's it!** The script handles everything automatically:
-- System dependencies installation
-- Environment configuration
-- Database setup
-- Frontend build
-- Service startup
-- Verification tests
+## System Requirements
 
-## 🚀 Manual Deployment Checklist
+- **OS**: Ubuntu 20.04+ or Debian 11+
+- **RAM**: 8GB minimum, 16GB+ recommended
+- **Storage**: 50GB+ free space
+- **CPU**: 4+ cores recommended
+- **Network**: Stable internet connection
+
+## Quick Installation
+
+### Step 1: Download and Prepare
+```bash
+# Clone the repository
+git clone https://github.com/pokerist/marmaricatv.git
+cd marmaricatv
+
+# Make deployment script executable
+chmod +x deploy.sh
+```
+
+### Step 2: Run Automated Deployment
+```bash
+# Run the deployment script
+./deploy.sh
+```
+
+The script will:
+1. Auto-detect your server IP
+2. Install all dependencies (Node.js, FFmpeg, Redis, etc.)
+3. Set up the simplified services
+4. Configure HLS streaming
+5. Create admin user
+6. Start all services
+
+### Step 3: Access the System
+After deployment completes, you can access:
+- **Admin Panel**: `http://YOUR_SERVER_IP:5000/login`
+- **API Health**: `http://YOUR_SERVER_IP:5000/api/health`
+- **HLS Streams**: `http://YOUR_SERVER_IP/hls_stream/channel_XX/output.m3u8`
+
+## Manual Installation (Advanced Users)
 
 If you prefer manual installation:
 
-- [ ] Server meets minimum requirements
-- [ ] Node.js 18+ installed
-- [ ] FFmpeg installed and configured
-- [ ] PM2 installed globally
-- [ ] Repository cloned and dependencies installed
-- [ ] Environment variables configured
-- [ ] Database initialized and migrated
-- [ ] Admin user created
-- [ ] Frontend built for production
-- [ ] Transcoding directories configured
-- [ ] Application started with PM2
-- [ ] Nginx configured (optional)
-
-## 📋 Prerequisites
-
-### System Requirements
-- **OS**: Ubuntu 20.04+ (or similar Linux distribution)
-- **RAM**: 4GB minimum, 8GB recommended
-- **Storage**: 50GB+ (depending on transcoding needs)
-- **Network**: Stable internet connection
-- **CPU**: 2+ cores recommended for transcoding
-
-### Required Software
+### 1. Install Dependencies
 ```bash
 # Update system
 sudo apt update && sudo apt upgrade -y
@@ -70,888 +84,244 @@ sudo apt-get install -y nodejs
 # Install FFmpeg
 sudo apt install -y ffmpeg
 
-# Install PM2 globally
-npm install -g pm2
+# Install Redis
+sudo apt install -y redis-server
 
-# Install Git
-sudo apt install -y git
+# Install PM2
+sudo npm install -g pm2
 
-# Install SQLite3 (for database management)
-sudo apt install -y sqlite3
-
-# Install Nginx (optional, for production)
+# Install Nginx
 sudo apt install -y nginx
 ```
 
-## 🛠️ Step-by-Step Installation
-
-### Step 1: Repository Setup
-
-```bash
-# Clone repository
-git clone https://github.com/pokerist/marmaricatv.git
-cd marmaricatv/Marmarica-TV
-
-# Verify directory structure
-ls -la
-# Should see: client/, server/, README.md, etc.
-```
-
-### Step 2: Install Dependencies
-
+### 2. Set Up Project
 ```bash
 # Install backend dependencies
 cd server
 npm install
 
-# Verify installation
-npm list --depth=0
-
 # Install frontend dependencies
 cd ../client
 npm install
-
-# Verify installation
-npm list --depth=0
-
-# Return to root directory
-cd ..
 ```
 
-### Step 3: Environment Configuration
-
-#### Server Environment
+### 3. Configure Environment
 ```bash
-# Create server environment file
+# Create server/.env
+cp server/.env.example server/.env
+# Edit server/.env with your settings
+
+# Create client/.env
+cp client/.env.example client/.env
+# Edit client/.env with your API URL
+```
+
+### 4. Initialize Database
+```bash
 cd server
-cp .env.example .env  # If exists, or create new .env
-
-# Edit server/.env
-nano .env
-```
-
-Add the following configuration:
-```env
-# Server Configuration
-NODE_ENV=production
-PORT=5000
-SESSION_SECRET=your-very-secure-random-string-change-this
-
-# Database
-DATABASE_PATH=./database.sqlite
-
-# CORS and API URLs
-CORS_ORIGIN=http://192.168.1.15:3000
-API_URL=http://192.168.1.15:5000
-SERVER_BASE_URL=http://192.168.1.15:5000
-
-# File Upload
-UPLOAD_DIR=uploads
-MAX_FILE_SIZE=5242880
-
-# Transcoding Configuration
-FFMPEG_PATH=ffmpeg
-HLS_OUTPUT_BASE=/var/www/html/hls_stream
-CLEANUP_INTERVAL=300000
-MAX_SEGMENT_AGE=30000
-MAX_CHANNEL_DIR_SIZE=104857600
-HLS_LIST_SIZE=3
-ORPHANED_DIR_CLEANUP_AGE=3600000
-```
-
-#### Client Environment
-```bash
-# Create client environment file
-cd ../client
-cp .env.example .env  # If exists, or create new .env
-
-# Edit client/.env
-nano .env
-```
-
-Add the following configuration:
-```env
-# API Configuration
-REACT_APP_API_URL=http://192.168.1.15:5000/api
-REACT_APP_API_TIMEOUT=8000
-REACT_APP_API_RETRIES=2
-
-# Upload Configuration
-REACT_APP_UPLOADS_URL=http://192.168.1.15:5000/uploads
-REACT_APP_MAX_UPLOAD_SIZE=5242880
-```
-
-### Step 4: Database Initialization
-
-```bash
-# Navigate to server directory
-cd ../server
-
-# Initialize complete database with ALL features (Phase 1, 2A, 2B)
 node scripts/initialize-database.js
-```
-
-**Expected Output:**
-```
-🚀 Starting Marmarica TV Database Initialization...
-
-📊 Database Connection
-✓ Connected to SQLite database
-
-📋 Base Tables
-✓ Created table devices
-✓ Created table channels
-✓ Created table news
-✓ Created table actions
-✓ Created table admins
-
-🔧 Transcoding Support
-✓ Added column transcoding_enabled to channels
-✓ Added column transcoded_url to channels
-✓ Added column transcoding_status to channels
-✓ Created table transcoding_jobs
-
-📊 Channel Ordering
-✓ Added column order_index to channels
-✓ Updated order_index for existing channels
-✓ Created index idx_channels_order
-
-🔄 State Tracking
-✓ Added column last_transcoding_state to channels
-✓ Updated last_transcoding_state for existing channels
-
-📦 Bulk Operations Support
-✓ Created table bulk_operations
-✓ Created table import_logs
-✓ Created index idx_bulk_operations_status
-
-🎛️ Transcoding Profiles
-✓ Created table transcoding_profiles
-✓ Added column transcoding_profile_id to channels
-✓ Inserted default profile: Fast (Low Quality)
-✓ Inserted default profile: Balanced
-✓ Inserted default profile: High Quality
-
-🚀 Phase 2A Enhanced Features
-✓ Added column stream_health_status to channels
-✓ Added column profile_recommendation to channels
-✓ Created table stream_health_history
-✓ Created table stream_health_alerts
-✓ Created table profile_templates
-✓ Created table transcoding_analytics
-✓ Inserted profile template: HD Sports
-✓ Inserted profile template: HD Movies
-✓ Inserted profile template: SD News
-✓ Created 20+ performance indexes
-
-📁 Directory Setup
-✓ Created uploads directory
-✓ HLS stream directory exists
-
-✅ Database Verification
-✓ Database integrity check passed
-✓ All required tables and columns verified
-
-📊 Summary
-✓ Successful operations: 45+
-⚠ Warnings: 0
-❌ Errors: 0
-
-🎉 Database initialization completed successfully!
-   Ready to start the application.
-```
-
-**Verification:**
-```bash
-# Verify all tables exist (should show 19 tables)
-sqlite3 database.sqlite "SELECT COUNT(*) FROM sqlite_master WHERE type='table';"
-# Should return: 19
-
-# Verify Phase 2A tables exist
-sqlite3 database.sqlite "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE '%health%';"
-# Should return: stream_health_history, stream_health_alerts
-
-# Verify profile templates are loaded
-sqlite3 database.sqlite "SELECT COUNT(*) FROM profile_templates;"
-# Should return: 5
-
-# Check database integrity
-sqlite3 database.sqlite "PRAGMA integrity_check;"
-# Should return: ok
-```
-
-#### Troubleshooting Database Initialization
-
-**If the script fails:**
-```bash
-# Check database file permissions
-ls -la database.sqlite
-chmod 664 database.sqlite
-
-# Remove corrupted database and retry (for fresh deployments)
-rm database.sqlite
-node scripts/initialize-database.js
-```
-
-**If you see warnings about existing tables/columns:**
-- This is normal and expected - the script is idempotent
-- Warnings mean the database already has some components
-- The script will skip existing items and continue
-
-**For permission errors:**
-```bash
-# Ensure uploads directory is writable
-chmod 755 uploads
-
-# Ensure HLS directory exists and is writable
-sudo mkdir -p /var/www/html/hls_stream
-sudo chown -R $USER:$USER /var/www/html/hls_stream
-sudo chmod -R 755 /var/www/html/hls_stream
-```
-
-**Important Notes:**
-- This single script creates the COMPLETE database schema
-- NO additional migration scripts are needed for new deployments
-- All Phase 1, 2A, and 2B features are included
-- The script is safe to run multiple times (idempotent)
-
-### Step 5: Admin User Creation
-
-```bash
-# Create admin user with random password
 node scripts/manage-admin.js create admin
-
-# OR create with specific password
-node scripts/manage-admin.js set-password admin Smart@2025
-
-# Check admin-credentials.txt for login details
-cat admin-credentials.txt
 ```
 
-### Step 6: Storage Configuration
-
+### 5. Build and Start
 ```bash
-# Create HLS output directory
-sudo mkdir -p /var/www/html/hls_stream
-sudo chown -R $USER:$USER /var/www/html/hls_stream
-sudo chmod -R 755 /var/www/html/hls_stream
-
-# Create and configure uploads directory
-mkdir -p uploads
-chmod 755 uploads
-
-# Verify directory permissions
-ls -la uploads/
-ls -la /var/www/html/hls_stream/
-```
-
-### Step 7: Build Frontend
-
-```bash
-# Navigate to client directory
-cd ../client
-
-# Build production version
+# Build frontend
+cd client
 npm run build
 
-# Verify build
-ls -la build/
-```
-
-### Step 8: PM2 Configuration
-
-```bash
-# Navigate to root directory
-cd ..
-
-# Create PM2 ecosystem file
-nano ecosystem.config.js
-```
-
-Add the following configuration:
-```javascript
-module.exports = {
-  apps: [{
-    name: 'marmarica-tv-server',
-    script: 'server/index.js',
-    instances: 1,
-    exec_mode: 'fork',
-    env: {
-      NODE_ENV: 'production',
-      PORT: 5000,
-      SESSION_SECRET: 'your-very-secure-random-string-change-this'
-    },
-    error_file: './logs/err.log',
-    out_file: './logs/out.log',
-    log_file: './logs/combined.log',
-    time: true,
-    max_restarts: 10,
-    min_uptime: '10s',
-    max_memory_restart: '1G'
-  }]
-};
-```
-
-### Step 9: Start Application
-
-```bash
-# Create logs directory
-mkdir -p logs
-
 # Start with PM2
+cd ..
 pm2 start ecosystem.config.js
-
-# Check status
-pm2 status
-pm2 logs marmarica-tv-server
-
-# Save PM2 configuration
 pm2 save
-
-# Setup PM2 startup script
-pm2 startup
-# Follow the instructions printed by the command
 ```
 
-## 🔧 Production Optimization
+## Configuration
 
-### Nginx Configuration (Recommended)
-
-```bash
-# Create Nginx configuration
-sudo nano /etc/nginx/sites-available/marmarica-tv
+### Environment Variables (server/.env)
+```env
+NODE_ENV=production
+PORT=5000
+CORS_ORIGIN=http://YOUR_SERVER_IP:5000
+HLS_OUTPUT_BASE=/var/www/html/hls_stream
+FFMPEG_PATH=ffmpeg
 ```
 
-Add the following configuration:
-```nginx
-server {
-    listen 80;
-    server_name your-domain.com;
-
-    # Client-side routing support
-    location / {
-        proxy_pass http://localhost:5000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header X-Forwarded-Host $host;
-        proxy_set_header X-Forwarded-Port $server_port;
-        
-        # WebSocket support (if needed)
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        
-        # Timeouts
-        proxy_connect_timeout 60s;
-        proxy_send_timeout 60s;
-        proxy_read_timeout 60s;
-    }
-
-    # HLS streaming files
-    location /hls_stream {
-        alias /var/www/html/hls_stream;
-        expires 1s;
-        add_header Cache-Control "no-cache, no-store, must-revalidate";
-        add_header Pragma "no-cache";
-        add_header Access-Control-Allow-Origin "*";
-        add_header Access-Control-Allow-Methods "GET, POST, OPTIONS";
-        add_header Access-Control-Allow-Headers "Origin, X-Requested-With, Content-Type, Accept, Authorization";
-        
-        # Handle CORS preflight requests
-        if ($request_method = 'OPTIONS') {
-            add_header Access-Control-Allow-Origin "*";
-            add_header Access-Control-Allow-Methods "GET, POST, OPTIONS";
-            add_header Access-Control-Allow-Headers "Origin, X-Requested-With, Content-Type, Accept, Authorization";
-            add_header Access-Control-Max-Age 86400;
-            add_header Content-Type "text/plain charset=UTF-8";
-            add_header Content-Length 0;
-            return 204;
-        }
-    }
-
-    # Static file uploads
-    location /uploads {
-        alias /path/to/marmarica-tv/server/uploads;
-        expires 30d;
-        add_header Cache-Control "public, immutable";
-        add_header Access-Control-Allow-Origin "*";
-    }
-
-    # Security headers
-    add_header X-Frame-Options "SAMEORIGIN" always;
-    add_header X-Content-Type-Options "nosniff" always;
-    add_header X-XSS-Protection "1; mode=block" always;
-    add_header Referrer-Policy "no-referrer-when-downgrade" always;
-
-    # Gzip compression
-    gzip on;
-    gzip_comp_level 6;
-    gzip_min_length 1000;
-    gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;
-}
+### Environment Variables (client/.env)
+```env
+REACT_APP_API_URL=http://YOUR_SERVER_IP:5000/api
+REACT_APP_UPLOADS_URL=http://YOUR_SERVER_IP:5000/uploads
 ```
 
-Enable the site:
-```bash
-# Enable the site
-sudo ln -s /etc/nginx/sites-available/marmarica-tv /etc/nginx/sites-enabled/
+## Usage
 
-# Test configuration
-sudo nginx -t
+### Adding Channels
+1. Login to admin panel
+2. Go to "Channels" section
+3. Add new channel with:
+   - Name
+   - Stream URL (TV Headend format supported)
+   - Enable transcoding if needed
+4. System will automatically analyze the stream and apply appropriate settings
 
-# Restart Nginx
-sudo systemctl restart nginx
-sudo systemctl enable nginx
-```
+### Transcoding
+- **Automatic**: System analyzes streams via ffprobe and applies optimal settings
+- **Manual**: Expert users can create custom transcoding profiles
+- **Default**: Uses the optimized LL-HLS template for all streams
 
-### Firewall Configuration
+### Stream Health
+- Automatically monitors all streams
+- Updates status in real-time
+- Provides uptime percentages
+- Alerts for failed streams
 
-```bash
-# Configure UFW firewall
-sudo ufw allow 22/tcp   # SSH
-sudo ufw allow 80/tcp   # HTTP
-sudo ufw allow 443/tcp  # HTTPS (if using SSL)
-sudo ufw allow 5000/tcp # Node.js (if not using Nginx)
+## Troubleshooting
 
-# Enable firewall
-sudo ufw enable
-sudo ufw status
-```
+### Common Issues
 
-## ✅ Verification Steps
+1. **Streams not working**:
+   ```bash
+   # Check transcoding logs
+   pm2 logs marmarica-tv-server
+   
+   # Check HLS directory permissions
+   ls -la /var/www/html/hls_stream/
+   
+   # Test direct stream access
+   curl -I http://YOUR_SERVER_IP/hls_stream/channel_1/output.m3u8
+   ```
 
-### 1. Database Verification
-```bash
-cd server
+2. **Health monitoring shows wrong status**:
+   ```bash
+   # Check stream health service
+   curl http://YOUR_SERVER_IP:5000/api/stream-health/overview
+   
+   # Force manual health check
+   curl -X POST http://YOUR_SERVER_IP:5000/api/stream-health/monitor-all
+   ```
 
-# Check all required tables exist
-sqlite3 database.sqlite "SELECT name FROM sqlite_master WHERE type='table';"
-# Should show: devices, channels, news, actions, admins, transcoding_jobs, bulk_operations, import_logs
+3. **High memory usage**:
+   ```bash
+   # Check cleanup service
+   curl -X POST http://YOUR_SERVER_IP:5000/api/transcoding/cleanup
+   ```
 
-# Verify channels table has all required columns
-sqlite3 database.sqlite "PRAGMA table_info(channels);"
-# Should include: transcoding_enabled, transcoded_url, transcoding_status, last_transcoding_state, order_index
+### Service Management
 
-# Verify bulk operations tables exist
-sqlite3 database.sqlite "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('bulk_operations', 'import_logs');"
-# Should return: bulk_operations, import_logs
-
-# Check database integrity
-sqlite3 database.sqlite "PRAGMA integrity_check;"
-# Should return: ok
-```
-
-### 2. Admin Authentication Test
-```bash
-# Check admin credentials
-cat server/admin-credentials.txt
-
-# Test login via API
-curl -X POST http://localhost:5000/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"your-password"}'
-# Should return success with session cookie
-
-# Test admin session
-curl -X GET http://localhost:5000/api/auth/session \
-  -H "Cookie: connect.sid=your-session-id"
-# Should return admin user info
-```
-
-### 3. Core API Endpoints Test
-```bash
-# Test dashboard endpoint
-curl -X GET http://localhost:5000/api/dashboard \
-  -H "Cookie: connect.sid=your-session-id"
-# Should return dashboard data
-
-# Test channels endpoint
-curl -X GET http://localhost:5000/api/channels \
-  -H "Cookie: connect.sid=your-session-id"
-# Should return channels array
-
-# Test devices endpoint
-curl -X GET http://localhost:5000/api/devices \
-  -H "Cookie: connect.sid=your-session-id"
-# Should return devices array
-
-# Test news endpoint
-curl -X GET http://localhost:5000/api/news \
-  -H "Cookie: connect.sid=your-session-id"
-# Should return news array
-```
-
-### 4. Phase 2A Features Test
-```bash
-# Test bulk operations stats
-curl -X GET http://localhost:5000/api/bulk-operations/stats \
-  -H "Cookie: connect.sid=your-session-id"
-# Should return bulk operations statistics
-
-# Test transcoding eligible channels
-curl -X GET http://localhost:5000/api/bulk-operations/transcoding-eligible \
-  -H "Cookie: connect.sid=your-session-id"
-# Should return channels eligible for transcoding
-
-# Test recent bulk operations
-curl -X GET http://localhost:5000/api/bulk-operations/recent \
-  -H "Cookie: connect.sid=your-session-id"
-# Should return recent bulk operations
-```
-
-### 5. Client API Test
-```bash
-# Test client device check (should fail for non-existent device)
-curl -X POST http://localhost:5000/api/client/check-device \
-  -H "Content-Type: application/json" \
-  -d '{"duid":"TEST123"}'
-# Should return 404 with "Device not registered"
-
-# Test client device registration
-curl -X POST http://localhost:5000/api/client/register-device \
-  -H "Content-Type: application/json" \
-  -d '{"duid":"TEST123456"}'
-# Should return success with activation code
-```
-
-### 6. Transcoding System Test
-```bash
-# Check FFmpeg installation
-ffmpeg -version
-# Should display FFmpeg version info
-
-# Check HLS directory permissions
-ls -la /var/www/html/hls_stream/
-# Should be writable by the application user
-
-# Test transcoding endpoints
-curl -X GET http://localhost:5000/api/transcoding/stats \
-  -H "Cookie: connect.sid=your-session-id"
-# Should return transcoding statistics
-
-curl -X GET http://localhost:5000/api/transcoding/jobs \
-  -H "Cookie: connect.sid=your-session-id"
-# Should return active transcoding jobs
-```
-
-### 7. File Upload Test
-```bash
-# Check upload directory
-ls -la server/uploads/
-# Should be writable by the application user
-
-# Test file upload endpoint (requires multipart form)
-curl -X POST http://localhost:5000/api/channels/1/logo \
-  -H "Cookie: connect.sid=your-session-id" \
-  -F "logo=@/path/to/test/image.jpg"
-# Should return success or appropriate error
-```
-
-### 8. Application Health Check
 ```bash
 # Check PM2 status
 pm2 status
-# Should show marmarica-tv-server as "online"
 
-# Check application logs
-pm2 logs marmarica-tv-server --lines 50
-# Should show no critical errors
+# Restart services
+pm2 restart marmarica-tv-server
 
-# Test health endpoint
-curl http://localhost:5000/api/health
-# Should return: {"status":"OK","message":"Server is running"}
-
-# Test if transcoding service initialized
-pm2 logs marmarica-tv-server | grep -i "transcoding"
-# Should show "Transcoding service initialized"
-```
-
-### 9. Frontend Access Test
-```bash
-# Test direct frontend access
-curl -I http://localhost:5000/
-# Should return 200 OK with HTML content
-
-# Test API accessibility
-curl -I http://localhost:5000/api/health
-# Should return 200 OK with JSON content
-
-# Test static files
-curl -I http://localhost:5000/uploads/
-# Should return 200 OK or 403 Forbidden (directory listing)
-
-# Test HLS stream directory
-curl -I http://localhost:5000/hls_stream/
-# Should return 200 OK or 403 Forbidden
-```
-
-### 10. Complete System Integration Test
-```bash
-# Run comprehensive test script
-cat > test-system.sh << 'EOF'
-#!/bin/bash
-echo "Testing Marmarica TV System..."
-
-# Test 1: Database
-echo "1. Testing database..."
-sqlite3 server/database.sqlite "SELECT COUNT(*) FROM sqlite_master WHERE type='table';" || echo "❌ Database test failed"
-
-# Test 2: Health endpoint
-echo "2. Testing health endpoint..."
-curl -s http://localhost:5000/api/health | grep -q "OK" && echo "✅ Health OK" || echo "❌ Health failed"
-
-# Test 3: PM2 status
-echo "3. Testing PM2 status..."
-pm2 status marmarica-tv-server | grep -q "online" && echo "✅ PM2 OK" || echo "❌ PM2 failed"
-
-# Test 4: FFmpeg
-echo "4. Testing FFmpeg..."
-ffmpeg -version > /dev/null 2>&1 && echo "✅ FFmpeg OK" || echo "❌ FFmpeg failed"
-
-# Test 5: Directories
-echo "5. Testing directories..."
-[ -d "/var/www/html/hls_stream" ] && echo "✅ HLS directory OK" || echo "❌ HLS directory failed"
-[ -d "server/uploads" ] && echo "✅ Upload directory OK" || echo "❌ Upload directory failed"
-
-echo "System test completed!"
-EOF
-
-chmod +x test-system.sh
-./test-system.sh
-```
-
-## 🔄 Post-Deployment Tasks
-
-### 1. Security Hardening
-```bash
-# Update all packages
-sudo apt update && sudo apt upgrade -y
-
-# Configure automatic security updates
-sudo apt install unattended-upgrades
-sudo dpkg-reconfigure -plow unattended-upgrades
-```
-
-### 2. Monitoring Setup
-```bash
-# Install htop for system monitoring
-sudo apt install htop
-
-# Setup log rotation
-sudo nano /etc/logrotate.d/marmarica-tv
-```
-
-Add log rotation configuration:
-```
-/path/to/marmarica-tv/logs/*.log {
-    daily
-    missingok
-    rotate 14
-    compress
-    delaycompress
-    notifempty
-    create 644 user group
-    postrotate
-        pm2 reload marmarica-tv-server
-    endscript
-}
-```
-
-### 3. Backup Strategy
-```bash
-# Create backup script
-nano backup-marmarica.sh
-```
-
-Add backup script:
-```bash
-#!/bin/bash
-BACKUP_DIR="/home/backups/marmarica-tv"
-DATE=$(date +%Y%m%d_%H%M%S)
-
-mkdir -p $BACKUP_DIR
-
-# Backup database
-cp /path/to/marmarica-tv/server/database.sqlite $BACKUP_DIR/database_$DATE.sqlite
-
-# Backup uploads
-tar -czf $BACKUP_DIR/uploads_$DATE.tar.gz -C /path/to/marmarica-tv/server uploads/
-
-# Backup configuration
-cp /path/to/marmarica-tv/server/.env $BACKUP_DIR/server_env_$DATE.backup
-cp /path/to/marmarica-tv/client/.env $BACKUP_DIR/client_env_$DATE.backup
-
-# Remove old backups (keep last 30 days)
-find $BACKUP_DIR -name "*.sqlite" -mtime +30 -delete
-find $BACKUP_DIR -name "*.tar.gz" -mtime +30 -delete
-find $BACKUP_DIR -name "*.backup" -mtime +30 -delete
-
-echo "Backup completed: $DATE"
-```
-
-Make script executable and add to cron:
-```bash
-chmod +x backup-marmarica.sh
-crontab -e
-# Add: 0 2 * * * /path/to/backup-marmarica.sh
-```
-
-## 🚨 Troubleshooting
-
-### Common Issues and Solutions
-
-#### 1. Database Connection Error
-```bash
-# Check database file permissions
-ls -la server/database.sqlite
-sudo chown $USER:$USER server/database.sqlite
-chmod 664 server/database.sqlite
-```
-
-#### 2. FFmpeg Not Found
-```bash
-# Check FFmpeg installation
-which ffmpeg
-ffmpeg -version
-
-# If not found, install:
-sudo apt install ffmpeg
-```
-
-#### 3. Permission Denied for HLS Directory
-```bash
-# Fix permissions
-sudo chown -R $USER:$USER /var/www/html/hls_stream
-sudo chmod -R 755 /var/www/html/hls_stream
-```
-
-#### 4. PM2 Process Crashes
-```bash
-# Check logs
+# View logs
 pm2 logs marmarica-tv-server
 
-# Restart with more memory
-pm2 restart marmarica-tv-server --max-memory-restart 2G
+# Check Nginx
+sudo systemctl status nginx
+
+# Reload Nginx
+sudo systemctl reload nginx
 ```
 
-#### 5. High CPU Usage
+### Database Operations
+
 ```bash
-# Check running processes
-htop
-ps aux | grep ffmpeg
+cd server
 
-# Monitor transcoding jobs
-pm2 monit
+# Reset admin password
+node scripts/manage-admin.js reset-password admin
+
+# View database
+sqlite3 database.sqlite
+.tables
+SELECT * FROM channels;
 ```
 
-## 📞 Support
+## Backup and Maintenance
 
-For technical issues during deployment:
+### Backup
+```bash
+# Create backup
+tar -czf backup-$(date +%Y%m%d).tar.gz \
+    --exclude='node_modules' \
+    --exclude='build' \
+    server/ client/ *.md *.json *.js
+
+# Backup database only
+cp server/database.sqlite backup-db-$(date +%Y%m%d).sqlite
+```
+
+### Maintenance
+```bash
+# Update Node.js packages
+cd server && npm update
+cd ../client && npm update
+
+# Clean up old segments
+curl -X POST http://YOUR_SERVER_IP:5000/api/transcoding/cleanup
+
+# Clean up old health history
+curl -X POST http://YOUR_SERVER_IP:5000/api/stream-health/cleanup
+```
+
+## API Endpoints
+
+### Health Monitoring
+- `GET /api/stream-health/overview` - Get health overview
+- `GET /api/stream-health/channel/{id}` - Get channel health
+- `POST /api/stream-health/monitor-all` - Trigger monitoring
+
+### Transcoding
+- `GET /api/transcoding/jobs` - Get active jobs
+- `POST /api/transcoding/start/{channelId}` - Start transcoding
+- `POST /api/transcoding/stop/{channelId}` - Stop transcoding
+- `POST /api/transcoding/cleanup` - Clean up old files
+
+### Channels
+- `GET /api/channels` - List all channels
+- `POST /api/channels` - Create new channel
+- `PUT /api/channels/{id}` - Update channel
+- `DELETE /api/channels/{id}` - Delete channel
+
+## Security
+
+### Firewall Setup
+```bash
+# Allow required ports
+sudo ufw allow 22/tcp   # SSH
+sudo ufw allow 80/tcp   # HTTP (HLS)
+sudo ufw allow 5000/tcp # Express app
+sudo ufw enable
+```
+
+### SSL/HTTPS (Optional)
+```bash
+# Install Certbot
+sudo apt install certbot python3-certbot-nginx
+
+# Get SSL certificate
+sudo certbot --nginx -d your-domain.com
+```
+
+## Support
+
+For issues or questions:
 1. Check the logs: `pm2 logs marmarica-tv-server`
-2. Verify environment variables are set correctly
-3. Ensure all dependencies are installed
-4. Check file permissions for uploads and HLS directories
-5. Verify database integrity with SQLite commands
+2. Verify services: `pm2 status`
+3. Test API endpoints using curl
+4. Review configuration files
 
-## 🎉 Success Criteria
+## Changelog
 
-Your deployment is successful when all of the following are working:
-
-### Core System
-- [ ] Admin panel accessible at configured URL
-- [ ] Admin login works with created credentials
-- [ ] PM2 shows application as "online"
-- [ ] All database migrations completed successfully
-- [ ] Database integrity check passes
-- [ ] FFmpeg is installed and accessible
-- [ ] HLS output directory has correct permissions
-
-### Basic Features
-- [ ] Channel management (CRUD operations) works
-- [ ] Device management (CRUD operations) works
-- [ ] News management (CRUD operations) works
-- [ ] Dashboard displays statistics correctly
-- [ ] File upload functionality works
-- [ ] Logo upload for channels works
-
-### Phase 1 Features ✅
-- [ ] Original URLs display in channel edit forms
-- [ ] Transcoded URLs display separately as read-only
-- [ ] Transcoding service starts and stops properly
-- [ ] System restarts maintain transcoding state
-- [ ] `last_transcoding_state` column exists in channels table
-- [ ] Previously active channels restart automatically after reboot
-
-### Phase 2A Features ✅
-- [ ] M3U8 file upload interface works
-- [ ] M3U8 parsing and validation works
-- [ ] Duplicate detection prevents re-imports
-- [ ] Bulk channel import works
-- [ ] Bulk transcoding modal loads eligible channels
-- [ ] "Transcode All" functionality works
-- [ ] Bulk operations tracking works
-- [ ] `bulk_operations` and `import_logs` tables exist
-
-### API Endpoints
-- [ ] Health endpoint returns OK status
-- [ ] Admin authentication endpoints work
-- [ ] Channel API endpoints respond correctly
-- [ ] Device API endpoints respond correctly
-- [ ] News API endpoints respond correctly
-- [ ] Dashboard API endpoints respond correctly
-- [ ] Transcoding API endpoints respond correctly
-- [ ] Bulk operations API endpoints respond correctly
-- [ ] Client API endpoints respond correctly
-
-### Transcoding System
-- [ ] FFmpeg processes can be spawned
-- [ ] HLS streams are accessible via direct URL
-- [ ] Transcoding status updates correctly
-- [ ] Transcoded URLs are generated properly
-- [ ] Transcoding cleanup works automatically
-- [ ] Storage monitoring functions correctly
-
-### Client Integration
-- [ ] Device registration works
-- [ ] Device activation works
-- [ ] Device status checking works
-- [ ] Content filtering by device type works
-- [ ] Expired device handling works correctly
-
-### File Management
-- [ ] Upload directory is writable
-- [ ] HLS stream directory is writable
-- [ ] File cleanup processes work
-- [ ] Storage limits are enforced
-- [ ] Backup procedures are in place
-
-### Performance & Monitoring
-- [ ] System resource usage is reasonable
-- [ ] Log files are being generated
-- [ ] Error handling works properly
-- [ ] Performance monitoring is functional
-- [ ] Automated cleanup prevents disk space issues
-
-### Security
-- [ ] Admin authentication is secure
-- [ ] Session management works
-- [ ] Input validation prevents injection
-- [ ] File upload security works
-- [ ] API rate limiting is functional (if implemented)
-
-### Integration Testing
-- [ ] Complete system integration test passes
-- [ ] All documented API endpoints are accessible
-- [ ] Frontend-backend communication works
-- [ ] Database operations are reliable
-- [ ] External dependencies (FFmpeg) are functional
-
-**Deployment Complete**: When all items above are checked ✅
+### v2.0 - Simplified Edition
+- Simplified transcoding with single optimized template
+- Real-time stream health monitoring
+- Automatic failure handling
+- Memory-efficient operations
+- Better UX with automatic status updates
+- Streamlined deployment process
 
 ---
 
-**Deployment Guide Version**: 2.0.0  
-**Last Updated**: January 2025  
-**Tested On**: Ubuntu 20.04, Node.js 18+
+**Note**: This simplified version focuses on core functionality while maintaining reliability. Expert users can still access advanced features through the API, but the default experience is much simpler and more reliable.

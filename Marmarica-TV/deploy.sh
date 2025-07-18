@@ -594,52 +594,53 @@ test_phase2a_endpoints() {
     fi
 }
 
-# Initialize Phase 2A services
-initialize_phase2a_services() {
-    log "Initializing Phase 2A services..."
+# Initialize simplified services
+initialize_simplified_services() {
+    log "Initializing simplified services..."
     
     cd "$SCRIPT_DIR/server"
     
-    # Test individual services with detailed error reporting
+    # Test simplified transcoding service
+    local transcoding_test=$(node -e "
+        try {
+            const simplifiedTranscoding = require('./services/simplified-transcoding');
+            console.log('simplified-transcoding loaded successfully');
+        } catch (error) {
+            console.error('simplified-transcoding error:', error.message);
+            process.exit(1);
+        }
+    " 2>&1)
+    
+    if [[ "$transcoding_test" == *"loaded successfully"* ]]; then
+        log "✓ Simplified transcoding service loaded"
+    else
+        warning "Simplified transcoding failed to load: $transcoding_test"
+        warning "Transcoding will use fallback mode"
+    fi
+    
+    # Test simplified stream health service
     local stream_health_test=$(node -e "
         try {
-            const streamHealthMonitor = require('./services/stream-health-monitor');
-            console.log('stream-health-monitor loaded successfully');
+            const simplifiedStreamHealth = require('./services/simplified-stream-health');
+            console.log('simplified-stream-health loaded successfully');
         } catch (error) {
-            console.error('stream-health-monitor error:', error.message);
+            console.error('simplified-stream-health error:', error.message);
             process.exit(1);
         }
     " 2>&1)
     
     if [[ "$stream_health_test" == *"loaded successfully"* ]]; then
-        log "✓ Stream health monitor service loaded"
+        log "✓ Simplified stream health service loaded"
     else
-        warning "Stream health monitor failed to load: $stream_health_test"
+        warning "Simplified stream health failed to load: $stream_health_test"
         warning "Stream health monitoring will use fallback mode"
     fi
     
-    local profile_template_test=$(node -e "
-        try {
-            const profileTemplateManager = require('./services/profile-template-manager');
-            console.log('profile-template-manager loaded successfully');
-        } catch (error) {
-            console.error('profile-template-manager error:', error.message);
-            process.exit(1);
-        }
-    " 2>&1)
-    
-    if [[ "$profile_template_test" == *"loaded successfully"* ]]; then
-        log "✓ Profile template manager service loaded"
+    # Overall simplified service status
+    if [[ "$transcoding_test" == *"loaded successfully"* ]] && [[ "$stream_health_test" == *"loaded successfully"* ]]; then
+        log "✓ Simplified services initialized successfully"
     else
-        warning "Profile template manager failed to load: $profile_template_test"
-        warning "Profile recommendations will use fallback mode"
-    fi
-    
-    # Overall Phase 2A service status - don't fail deployment
-    if [[ "$stream_health_test" == *"loaded successfully"* ]] && [[ "$profile_template_test" == *"loaded successfully"* ]]; then
-        log "✓ Phase 2A services initialized successfully"
-    else
-        warning "Phase 2A services partially initialized - some features may use fallback mode"
+        warning "Simplified services partially initialized - some features may use fallback mode"
         warning "Deployment will continue with core functionality"
     fi
     
@@ -1314,7 +1315,7 @@ main() {
     create_admin_user
     build_frontend
     verify_frontend_components
-    initialize_phase2a_services
+    initialize_simplified_services
     configure_nginx_hls
     setup_hls_permissions
     configure_firewall

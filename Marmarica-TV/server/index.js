@@ -177,6 +177,7 @@ const bulkOperationsRoutes = require('./routes/bulk-operations');
 const enhancedTranscodingRoutes = require('./routes/enhanced-transcoding');
 const optimizedTranscodingRoutes = require('./routes/optimized-transcoding');
 const streamHealthRoutes = require('./routes/stream-health');
+const simplifiedStreamHealthRoutes = require('./routes/simplified-stream-health');
 const profileTemplatesRoutes = require('./routes/profile-templates');
 const smartTranscodingRoutes = require('./routes/smart-transcoding');
 
@@ -198,7 +199,8 @@ app.use('/api/transcoding-profiles', isAuthenticated, transcodingProfilesRoutes)
 app.use('/api/bulk-operations', isAuthenticated, bulkOperationsRoutes);
 app.use('/api/enhanced-transcoding', isAuthenticated, enhancedTranscodingRoutes);
 app.use('/api/optimized-transcoding', isAuthenticated, optimizedTranscodingRoutes);
-app.use('/api/stream-health', isAuthenticated, streamHealthRoutes);
+app.use('/api/stream-health', isAuthenticated, simplifiedStreamHealthRoutes);
+app.use('/api/stream-health-legacy', isAuthenticated, streamHealthRoutes);
 app.use('/api/profile-templates', isAuthenticated, profileTemplatesRoutes);
 app.use('/api/smart-transcoding', isAuthenticated, smartTranscodingRoutes);
 app.use('/api/client', clientRoutes); // Client routes remain open
@@ -302,152 +304,57 @@ function checkExpiredDevices() {
   }
 }
 
-// Initialize transcoding service
+// Initialize simplified services
+const simplifiedTranscodingService = require('./services/simplified-transcoding');
+const simplifiedStreamHealthService = require('./services/simplified-stream-health');
+
+// Keep enhanced services for fallback (if needed)
 const transcodingService = require('./services/transcoding');
-const optimizedTranscodingService = require('./services/optimized-transcoding');
 
-// Phase 2A services
-const streamHealthMonitor = require('./services/stream-health-monitor');
-const profileTemplateManager = require('./services/profile-template-manager');
-
-// Smart transcoding services
-const SmartTranscodingEngine = require('./services/smart-transcoding');
-const SmartTranscodingSchema = require('./scripts/smart-transcoding-schema');
-
-// Enhanced server initialization with fallbacks
-async function initializeEnhancedServices() {
+// Simplified server initialization
+async function initializeSimplifiedServices() {
   try {
-    console.log('Initializing services...');
+    console.log('Initializing simplified services...');
     
-    // 1. Run database migrations (if available)
-    if (enhancedServices.migrations) {
-      try {
-        console.log('Running database migrations...');
-        await enhancedServices.migrations.runMigrations();
-        console.log('Database migrations completed');
-      } catch (error) {
-        console.warn('Database migrations failed, continuing without enhanced tables:', error.message);
-      }
-    }
-    
-    // 2. Initialize session store (if available)
-    if (enhancedServices.sessionStore) {
-      try {
-        console.log('Initializing session store...');
-        sessionStore = await enhancedServices.sessionStore.initializeSessionStore();
-        
-        // Set up session middleware after store is initialized
-        app.use(enhancedServices.sessionStore.createSessionMiddleware(sessionStore));
-        console.log('Session store initialized');
-      } catch (error) {
-        console.warn('Session store initialization failed, using basic session:', error.message);
-        // Fallback to basic session
-        app.use(session({
-          secret: process.env.SESSION_SECRET || 'your-secret-key',
-          resave: false,
-          saveUninitialized: false,
-          cookie: {
-            httpOnly: true,
-            secure: false,
-            maxAge: 12 * 60 * 60 * 1000 // 12 hours
-          }
-        }));
-      }
-    } else {
-      // Fallback to basic session
-      console.log('Using basic session store');
-      app.use(session({
-        secret: process.env.SESSION_SECRET || 'your-secret-key',
-        resave: false,
-        saveUninitialized: false,
-        cookie: {
-          httpOnly: true,
-          secure: false,
-          maxAge: 12 * 60 * 60 * 1000 // 12 hours
-        }
-      }));
-    }
-    
-    // 3. Initialize resource monitoring (if available)
-    if (enhancedServices.resourceMonitoring) {
-      try {
-        console.log('Initializing resource monitoring...');
-        // Set database reference
-        enhancedServices.resourceMonitoring.setDatabase(db);
-        await enhancedServices.resourceMonitoring.initializeResourceMonitoring();
-        console.log('Resource monitoring initialized');
-      } catch (error) {
-        console.warn('Resource monitoring initialization failed:', error.message);
-      }
-    }
-    
-    // 4. Initialize enhanced transcoding (if available)
-    if (enhancedServices.enhancedTranscoding) {
-      try {
-        console.log('Initializing enhanced transcoding...');
-        // Set database reference
-        enhancedServices.enhancedTranscoding.setDatabase(db);
-        await enhancedServices.enhancedTranscoding.initializeEnhancedTranscoding();
-        console.log('Enhanced transcoding initialized');
-      } catch (error) {
-        console.warn('Enhanced transcoding initialization failed:', error.message);
-      }
-    }
-    
-    // 5. Initialize optimized transcoding service
+    // 1. Initialize simplified transcoding service
     try {
-      console.log('Initializing optimized transcoding service...');
-      optimizedTranscodingService.setDatabase(db);
-      await optimizedTranscodingService.initializeOptimizedTranscoding();
-      console.log('Optimized transcoding service initialized');
+      console.log('Initializing simplified transcoding service...');
+      simplifiedTranscodingService.setDatabase(db);
+      await simplifiedTranscodingService.initializeSimplifiedTranscoding();
+      console.log('Simplified transcoding service initialized');
     } catch (error) {
-      console.warn('Optimized transcoding initialization failed, falling back to legacy:', error.message);
+      console.warn('Simplified transcoding initialization failed, falling back to legacy:', error.message);
       // Fallback to legacy transcoding
       console.log('Initializing legacy transcoding service...');
       await transcodingService.initializeTranscoding();
     }
     
-    // 6. Initialize stream health monitoring (Phase 2A)
+    // 2. Initialize simplified stream health monitoring
     try {
-      console.log('Initializing stream health monitoring...');
-      streamHealthMonitor.setDatabase(db);
-      await streamHealthMonitor.initializeStreamHealthMonitoring();
-      console.log('Stream health monitoring initialized');
+      console.log('Initializing simplified stream health monitoring...');
+      simplifiedStreamHealthService.setDatabase(db);
+      await simplifiedStreamHealthService.initializeStreamHealthMonitoring();
+      console.log('Simplified stream health monitoring initialized');
     } catch (error) {
-      console.warn('Stream health monitoring initialization failed:', error.message);
+      console.warn('Simplified stream health monitoring initialization failed:', error.message);
     }
     
-    // 7. Initialize profile template management (Phase 2A)
-    try {
-      console.log('Initializing profile template management...');
-      profileTemplateManager.setDatabase(db);
-      await profileTemplateManager.initializeProfileTemplates();
-      console.log('Profile template management initialized');
-    } catch (error) {
-      console.warn('Profile template management initialization failed:', error.message);
+    // 3. Keep enhanced services for expert users (optional)
+    if (enhancedServices.enhancedTranscoding) {
+      try {
+        console.log('Initializing enhanced transcoding for expert features...');
+        enhancedServices.enhancedTranscoding.setDatabase(db);
+        // Don't auto-initialize, keep available for expert use
+        console.log('Enhanced transcoding available for expert users');
+      } catch (error) {
+        console.warn('Enhanced transcoding setup failed:', error.message);
+      }
     }
     
-    // 8. Initialize smart transcoding system
-    try {
-      console.log('Initializing smart transcoding system...');
-      
-      // Initialize schema
-      const smartTranscodingSchema = new SmartTranscodingSchema();
-      await smartTranscodingSchema.runAllUpdates();
-      
-      // Initialize smart transcoding engine
-      const smartTranscodingEngine = new SmartTranscodingEngine();
-      smartTranscodingEngine.setDatabase(db);
-      
-      console.log('Smart transcoding system initialized');
-    } catch (error) {
-      console.warn('Smart transcoding system initialization failed:', error.message);
-    }
-    
-    console.log('All services initialized successfully!');
+    console.log('Simplified services initialized successfully!');
     
   } catch (error) {
-    console.error('Error initializing services:', error);
+    console.error('Error initializing simplified services:', error);
     // Don't exit, continue with basic functionality
     console.log('Continuing with basic functionality...');
   }
@@ -465,66 +372,21 @@ app.listen(PORT, async () => {
   // Set up a periodic check for expired devices (every hour)
   setInterval(checkExpiredDevices, 60 * 60 * 1000);
   
-  // Initialize enhanced services
-  await initializeEnhancedServices();
+  // Initialize simplified services
+  await initializeSimplifiedServices();
 });
 
-// Enhanced shutdown handling with fallbacks
+// Simplified shutdown handling
 async function gracefulShutdown() {
   console.log('Received shutdown signal, shutting down gracefully...');
   
   try {
-    // 1. Cleanup enhanced transcoding processes (if available)
-    if (enhancedServices.enhancedTranscoding) {
-      try {
-        console.log('Cleaning up enhanced transcoding...');
-        await enhancedServices.enhancedTranscoding.cleanupEnhancedTranscoding();
-      } catch (error) {
-        console.warn('Enhanced transcoding cleanup failed:', error.message);
-      }
-    }
-    
-    // 2. Cleanup resource monitoring (if available)
-    if (enhancedServices.resourceMonitoring) {
-      try {
-        console.log('Cleaning up resource monitoring...');
-        await enhancedServices.resourceMonitoring.cleanupResourceMonitoring();
-      } catch (error) {
-        console.warn('Resource monitoring cleanup failed:', error.message);
-      }
-    }
-    
-    // 3. Cleanup session store (if available)
-    if (enhancedServices.sessionStore && sessionStore) {
-      try {
-        console.log('Cleaning up session store...');
-        await enhancedServices.sessionStore.cleanupSessionStore();
-      } catch (error) {
-        console.warn('Session store cleanup failed:', error.message);
-      }
-    }
-    
-    // 4. Cleanup Phase 2A services
+    // 1. Cleanup simplified transcoding service
     try {
-      console.log('Cleaning up stream health monitoring...');
-      await streamHealthMonitor.cleanupStreamHealthMonitoring();
+      console.log('Cleaning up simplified transcoding...');
+      await simplifiedTranscodingService.cleanupSimplifiedTranscoding();
     } catch (error) {
-      console.warn('Stream health monitoring cleanup failed:', error.message);
-    }
-    
-    try {
-      console.log('Cleaning up profile template management...');
-      await profileTemplateManager.cleanupProfileTemplateManagement();
-    } catch (error) {
-      console.warn('Profile template management cleanup failed:', error.message);
-    }
-    
-    // 5. Cleanup optimized transcoding processes
-    try {
-      console.log('Cleaning up optimized transcoding...');
-      await optimizedTranscodingService.cleanupOptimizedTranscoding();
-    } catch (error) {
-      console.warn('Optimized transcoding cleanup failed, trying legacy:', error.message);
+      console.warn('Simplified transcoding cleanup failed, trying legacy:', error.message);
       // Fallback to legacy transcoding cleanup
       try {
         console.log('Cleaning up legacy transcoding...');
@@ -534,7 +396,15 @@ async function gracefulShutdown() {
       }
     }
     
-    // 5. Close database connection
+    // 2. Cleanup simplified stream health monitoring
+    try {
+      console.log('Cleaning up simplified stream health monitoring...');
+      await simplifiedStreamHealthService.cleanupStreamHealthMonitoring();
+    } catch (error) {
+      console.warn('Simplified stream health monitoring cleanup failed:', error.message);
+    }
+    
+    // 3. Close database connection
     console.log('Closing database connection...');
     db.close((err) => {
       if (err) {
