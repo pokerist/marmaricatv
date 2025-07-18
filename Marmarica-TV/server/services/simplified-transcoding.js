@@ -765,5 +765,8 @@ module.exports = {
   cleanupChannelSegments,
   performPeriodicCleanup,
   initializeSimplifiedTranscoding,
-  cleanupSimplifiedTranscoding
+  cleanupSimplifiedTranscoding,
+  // Legacy method names for compatibility
+  cleanup: cleanupSimplifiedTranscoding,
+  getStorageStats: () => ({ totalSize: 0, channelCount: activeProcesses.size })
 };

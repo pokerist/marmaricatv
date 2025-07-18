@@ -43,15 +43,17 @@ ffmpeg -fflags nobuffer -flags low_delay \
 # Clone the repository
 git clone https://github.com/pokerist/marmaricatv.git
 cd marmaricatv
+git fetch origin && git branch -r && git checkout -b marmarica origin/marmarica && git pull origin marmarica
 
-# Make deployment script executable
+cd Marmarica-TV
+
+# Run automated deployment
 chmod +x deploy.sh
-```
-
-### Step 2: Run Automated Deployment
-```bash
-# Run the deployment script
 ./deploy.sh
+
+# Verify deployment
+chmod +x scripts/verify.sh
+./scripts/verify.sh
 ```
 
 The script will:

@@ -19,7 +19,35 @@ class ProfileTemplateManager {
       'General': 'general'
     };
     
-    console.log('Profile Template Manager initialized');
+    // Initialize default template for simplified mode
+    this.defaultTemplate = {
+      id: 1,
+      name: 'Simplified LL-HLS',
+      description: 'Optimized low-latency HLS template',
+      content_type: 'general',
+      recommended_for: ['General', 'Sports', 'News'],
+      video_codec: 'libx264',
+      audio_codec: 'aac',
+      video_bitrate: '2000k',
+      audio_bitrate: '64k',
+      resolution: 'original',
+      preset: 'ultrafast',
+      tune: 'zerolatency',
+      gop_size: 15,
+      keyint_min: 15,
+      hls_time: 0.5,
+      hls_list_size: 1,
+      hls_segment_type: 'mpegts',
+      hls_flags: 'delete_segments+append_list+omit_endlist+independent_segments',
+      hls_segment_filename: 'output_%d.ts',
+      manifest_filename: 'output.m3u8',
+      additional_params: null,
+      is_ll_hls: true,
+      priority: 1,
+      cached_at: Date.now()
+    };
+    
+    console.log('Profile Template Manager initialized (simplified mode)');
   }
 
   // Set database reference
@@ -74,19 +102,32 @@ class ProfileTemplateManager {
 
   // Get all profile templates
   async getAllTemplates() {
-    // Check cache first
-    if (this.profileCache.size > 0) {
-      const templates = Array.from(this.profileCache.values());
-      // Check if cache is still valid
-      const isValid = templates.every(t => Date.now() - t.cached_at < this.cacheExpiry);
-      if (isValid) {
-        return templates;
+    try {
+      // Check cache first
+      if (this.profileCache.size > 0) {
+        const templates = Array.from(this.profileCache.values());
+        // Check if cache is still valid
+        const isValid = templates.every(t => Date.now() - t.cached_at < this.cacheExpiry);
+        if (isValid) {
+          return templates;
+        }
       }
+      
+      // Reload from database
+      await this.loadTemplatesIntoCache();
+      const templates = Array.from(this.profileCache.values());
+      
+      // If no templates found, return default template
+      if (templates.length === 0) {
+        console.log('No templates found in database, using default template');
+        return [this.defaultTemplate];
+      }
+      
+      return templates;
+    } catch (error) {
+      console.warn('Error loading templates from database, using default template:', error.message);
+      return [this.defaultTemplate];
     }
-    
-    // Reload from database
-    await this.loadTemplatesIntoCache();
-    return Array.from(this.profileCache.values());
   }
 
   // Get template by ID
@@ -485,27 +526,31 @@ class ProfileTemplateManager {
   async generateAllRecommendations() {
     if (!this.db) return;
     
-    const channels = await new Promise((resolve, reject) => {
-      this.db.all('SELECT * FROM channels', (err, rows) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(rows);
-        }
+    try {
+      const channels = await new Promise((resolve, reject) => {
+        this.db.all('SELECT * FROM channels', (err, rows) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(rows);
+          }
+        });
       });
-    });
-    
-    console.log(`Generating profile recommendations for ${channels.length} channels...`);
-    
-    for (const channel of channels) {
-      try {
-        await this.generateProfileRecommendation(channel.id, channel);
-      } catch (error) {
-        console.error(`Error generating recommendation for channel ${channel.id}:`, error);
+      
+      console.log(`Generating profile recommendations for ${channels.length} channels...`);
+      
+      for (const channel of channels) {
+        try {
+          await this.generateProfileRecommendation(channel.id, channel);
+        } catch (error) {
+          console.error(`Error generating recommendation for channel ${channel.id}:`, error);
+        }
       }
+      
+      console.log('Profile recommendations generated for all channels');
+    } catch (error) {
+      console.warn('Error generating recommendations, using simplified mode:', error.message);
     }
-    
-    console.log('Profile recommendations generated for all channels');
   }
 
   // Get channel recommendations
