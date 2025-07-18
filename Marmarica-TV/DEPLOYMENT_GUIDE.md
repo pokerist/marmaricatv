@@ -68,21 +68,7 @@ ls -la
 
 ```bash
 # Install backend dependencies
-cd server
-npm install
-
-# Verify installation
-npm list --depth=0
-
-# Install frontend dependencies
-cd ../client
-npm install
-
-# Verify installation
-npm list --depth=0
-
-# Return to root directory
-cd ..
+cd server && npm install && cd ../client && npm install && cd ../server
 ```
 
 ### Step 3: Environment Configuration
